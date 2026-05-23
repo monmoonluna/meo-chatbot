@@ -15,6 +15,9 @@ data/
 # Logs
 *.log
 
+# Eval reports — generated, not source
+scripts/eval_results.md
+
 # Secrets
 .env
 .env.*
