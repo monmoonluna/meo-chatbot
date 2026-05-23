@@ -108,9 +108,10 @@ def main() -> None:
     )
     print(f"Collection '{COLLECTION}' has {collection.count()} existing items\n")
 
-    # Đọc chunks chưa được ingest
+    # Phân loại chunks: cái nào cần embed mới, cái nào chỉ cần update metadata
     existing_ids = set(collection.get(include=[])["ids"]) if collection.count() > 0 else set()
-    chunks = []
+    to_add: list[dict] = []      # chunks mới, cần embed
+    to_update: list[dict] = []   # chunks đã có, chỉ update metadata
     with Path(args.input).open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -118,28 +119,40 @@ def main() -> None:
                 continue
             c = json.loads(line)
             if c["chunk_id"] in existing_ids:
-                continue
-            chunks.append(c)
-            if args.limit and len(chunks) >= args.limit:
+                to_update.append(c)
+            else:
+                to_add.append(c)
+            if args.limit and (len(to_add) + len(to_update)) >= args.limit:
                 break
 
-    if not chunks:
-        print("Không có chunk mới để ingest.")
+    if not to_add and not to_update:
+        print("Không có chunk nào trong input.")
         return
 
-    print(f"Sẽ ingest {len(chunks):,} chunks mới\n")
-    model = load_model()
+    # Step 1: metadata-only update (NHANH, không cần model)
+    if to_update:
+        print(f"Updating metadata for {len(to_update):,} existing chunks...")
+        bar = tqdm(range(0, len(to_update), CHROMA_BATCH), desc="meta-update")
+        for start in bar:
+            batch = to_update[start:start + CHROMA_BATCH]
+            ids = [c["chunk_id"] for c in batch]
+            metas = [_clean_meta(c) for c in batch]
+            collection.update(ids=ids, metadatas=metas)
+        print(f"  ✓ Updated {len(to_update):,} chunks\n")
 
-    print("\nEmbedding + uploading...")
-    bar = tqdm(range(0, len(chunks), CHROMA_BATCH), desc="batches")
-    for start in bar:
-        batch = chunks[start:start + CHROMA_BATCH]
-        texts = [c["text"] for c in batch]
-        ids = [c["chunk_id"] for c in batch]
-        metas = [_clean_meta(c) for c in batch]
-        embeddings = embed_texts(model, texts)
-        collection.add(ids=ids, embeddings=embeddings, documents=texts, metadatas=metas)
-        bar.set_postfix(total=collection.count())
+    # Step 2: embed + add new chunks (CHẬM, cần model)
+    if to_add:
+        print(f"Embedding + adding {len(to_add):,} new chunks...")
+        model = load_model()
+        bar = tqdm(range(0, len(to_add), CHROMA_BATCH), desc="batches")
+        for start in bar:
+            batch = to_add[start:start + CHROMA_BATCH]
+            texts = [c["text"] for c in batch]
+            ids = [c["chunk_id"] for c in batch]
+            metas = [_clean_meta(c) for c in batch]
+            embeddings = embed_texts(model, texts)
+            collection.add(ids=ids, embeddings=embeddings, documents=texts, metadatas=metas)
+            bar.set_postfix(total=collection.count())
 
     print(f"\n=== Done: {collection.count():,} chunks in ChromaDB → {CHROMA_DIR} ===")
 

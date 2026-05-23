@@ -156,17 +156,27 @@ def _count_matches(text: str, keywords: list[str]) -> int:
 
 
 def classify_topic(text: str, source_default: str) -> tuple[str, int]:
-    """Return (topic, n_keyword_hits). Fall back to source_default nếu hòa/không hit."""
-    scores: dict[str, int] = {}
-    for topic, kws in TOPIC_KEYWORDS.items():
-        scores[topic] = _count_matches(text, kws)
+    """Return (topic, n_keyword_hits).
+
+    Rule (v2 — giảm source_default bias):
+      1. Không hit nào → source_default
+      2. Top hits < 2 → source_default (tránh noise từ 1 keyword)
+      3. Top khác source_default & top hits > source_default hits → FLIP
+      4. Ngược lại → source_default
+    """
+    scores: dict[str, int] = {t: _count_matches(text, kws)
+                              for t, kws in TOPIC_KEYWORDS.items()}
     top = max(scores, key=scores.get)
-    if scores[top] == 0:
+    top_score = scores[top]
+    src_score = scores.get(source_default, 0)
+
+    if top_score == 0:
         return source_default, 0
-    # Nếu top sát source_default (chênh <= 1) thì ưu tiên source_default — giảm flip
-    if top != source_default and scores[top] - scores.get(source_default, 0) <= 1:
-        return source_default, scores[source_default]
-    return top, scores[top]
+    if top_score < 2:
+        return source_default, src_score
+    if top != source_default and top_score > src_score:
+        return top, top_score
+    return source_default, src_score
 
 
 def classify_content_type(text: str) -> str:
