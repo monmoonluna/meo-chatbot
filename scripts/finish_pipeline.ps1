@@ -44,12 +44,12 @@ while ($restartNum -lt $maxRestarts) {
     # Detect natural completion via log marker
     $lastLines = Get-Content $logFile -Tail 5 -ErrorAction SilentlyContinue
     if ($lastLines -match "Done:.+chunks in ChromaDB") {
-        Write-Host "  [OK] Ingest reported Done — finishing loop"
+        Write-Host "  [OK] Ingest reported Done -- finishing loop"
         break
     }
 
     if ($elapsed -lt 30) {
-        Write-Host "  [WARN] Crashed in <30s, sleep 30s..."
+        Write-Host '  [WARN] Crashed quickly, sleep 30s...'
         Start-Sleep -Seconds 30
     } else {
         Start-Sleep -Seconds 5
@@ -72,5 +72,5 @@ Write-Host ""
 Write-Host "================================================================"
 Write-Host "  ALL DONE"
 Write-Host "================================================================"
-Add-Content -Path $summary -Value "[$([DateTime]::Now.ToString('HH:mm:ss'))] ALL DONE. ChromaDB=$(Get-ChromaCount) / $target"
+Add-Content -Path $summary -Value "[$([DateTime]::Now.ToString('HH:mm:ss'))] ALL DONE"
 Get-Content $summary -Tail 20
