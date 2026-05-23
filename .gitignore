@@ -1,0 +1,33 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Crawled / processed data — reproducible từ crawler/, không commit
+data/
+
+# Logs
+*.log
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Vector DB persistent files
+chromadb/
+*.sqlite
+*.sqlite3
+*.duckdb
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
