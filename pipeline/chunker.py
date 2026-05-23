@@ -51,10 +51,14 @@ def is_heading(line: str, next_nonempty: str) -> bool:
         return False
     if line.endswith(TERMINAL_PUNCT):
         return False
-    if line.startswith(("-", "•", "*", "+", "·")):
-        return False  # bullet
+    if line.startswith(("-", "•", "*", "+", "·", "|")):
+        return False  # bullet hoặc markdown table row
     if line[0].isdigit() and "." in line[:4]:
         return False  # numbered list "1. ..."
+    # Skip lines that are mostly separators (---, ===, |||)
+    alnum_count = sum(1 for c in line if c.isalnum())
+    if alnum_count / len(line) < 0.3:
+        return False
     if not next_nonempty or len(next_nonempty) < HEADING_NEXT_MIN_LEN:
         return False
     return True
