@@ -7,6 +7,12 @@ $targets = [ordered]@{
     paddy          = 367
     tropicpet      = 539
     champetsfamily = 332
+    # Phase 2 — behavior-focused
+    petspace       = 25
+    petthings      = 82
+    kingspet       = 393
+    fagopet        = 400
+    mochicat       = 2483
 }
 
 Write-Host "`n=== Crawl progress ===`n"

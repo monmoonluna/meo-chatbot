@@ -23,6 +23,10 @@ class Source:
     extra_seed_urls: list[str] = field(default_factory=list)
 
 
+# Slug patterns thường xuất hiện trong URL bài về mèo (kể cả khi không có "meo")
+_CAT_SLUG = r"(meo|kitten|hanh-vi|tam-ly|stress|tram-cam|cao-cau|huan-luyen|ghet|ghen)"
+
+
 SOURCES: list[Source] = [
     # Lịch sử: wcfvietnam.vn (TLS handshake fail từ VN) → meonhapkhau.com (không có
     # sitemap thật, mọi path return HTML) → champetsfamily.com (có sitemap chuẩn,
@@ -72,6 +76,52 @@ SOURCES: list[Source] = [
         ],
         url_filter_regex=r"(meo|kitten|cat-)",
         topic_hint="care",
+        rate_limit_sec=2.5,
+    ),
+
+    # ===== Behavior-focused VN sources (Phase 2) — lấp gap 3% behavior =====
+    # Regex narrow: BẮT BUỘC có "meo" hoặc behavior-related keyword trong URL
+    # để loại bỏ content khác (chó/cá/promo events) ở các site đa thú cưng.
+    Source(
+        name="petspace",
+        base_url="https://petspace.vn",
+        sitemap_urls=["https://petspace.vn/sitemap.xml"],
+        url_filter_regex=rf"/blogs/.+{_CAT_SLUG}",
+        topic_hint="behavior",
+        rate_limit_sec=2.0,
+    ),
+    Source(
+        name="petthings",
+        base_url="https://petthings.vn",
+        sitemap_urls=["https://petthings.vn/sitemap.xml"],
+        url_filter_regex=rf"/blogs/.+{_CAT_SLUG}",
+        topic_hint="behavior",
+        rate_limit_sec=2.0,
+    ),
+    Source(
+        name="mochicat",
+        base_url="https://mochicat.vn",
+        sitemap_urls=["https://mochicat.vn/sitemap.xml"],
+        # mochicat đa thú cưng (cá+chó+mèo) → bắt buộc "meo" cụ thể trong slug
+        # (keyword như "huan-luyen" trùng với content chó)
+        url_filter_regex=r"mochicat\.vn/[^/]*meo[^/]*/?$",
+        topic_hint="behavior",
+        rate_limit_sec=2.5,
+    ),
+    Source(
+        name="kingspet",
+        base_url="https://kingspet.vn",
+        sitemap_urls=["https://kingspet.vn/sitemap.xml"],
+        url_filter_regex=rf"kingspet\.vn/[^/]*{_CAT_SLUG}[^/]*/?$",
+        topic_hint="behavior",
+        rate_limit_sec=2.5,
+    ),
+    Source(
+        name="fagopet",
+        base_url="https://fagopet.vn",
+        sitemap_urls=["https://fagopet.vn/sitemaps/sitemap_posts.xml"],
+        url_filter_regex=rf"fagopet\.vn/[^/]*{_CAT_SLUG}",
+        topic_hint="behavior",
         rate_limit_sec=2.5,
     ),
 ]
