@@ -186,6 +186,7 @@ def main() -> None:
             n_articles = 0
             n_chunks = 0
             chunk_lens: list[int] = []
+            seen_urls: set[str] = set()  # dedupe — crawler append có thể tạo trùng
             with src_path.open("r", encoding="utf-8") as fin:
                 for line in fin:
                     line = line.strip()
@@ -198,6 +199,10 @@ def main() -> None:
                         continue
                     if not article.get("text"):
                         continue
+                    url = article.get("url")
+                    if url in seen_urls:
+                        continue  # skip duplicate article
+                    seen_urls.add(url)
                     n_articles += 1
                     for chunk in chunk_article(article, args.max_chars):
                         fout.write(json.dumps(chunk, ensure_ascii=False) + "\n")
