@@ -170,9 +170,11 @@ async def crawl_one(
     url: str,
     raw_dir: Path,
 ) -> dict | None:
+    """Return article dict for NEW fetches only. Returns None for cache hits
+    (caller skips sleep + skip re-append to avoid wasted time + JSONL dupes)."""
     raw_path = raw_dir / f"{_slug_for(url)}.json"
     if raw_path.exists():
-        return json.loads(raw_path.read_text(encoding="utf-8"))
+        return None  # cache hit — already in raw/ + cleaned/.jsonl from initial run
 
     try:
         r = await client.get(url, follow_redirects=True)
@@ -224,10 +226,11 @@ async def crawl_source(source: Source, limit: int | None, rate: float | None) ->
         with out_file.open("a", encoding="utf-8") as fout:
             for url in tqdm(urls, desc=source.name):
                 article = await crawl_one(client, source, url, raw_dir)
-                if article:
-                    fout.write(json.dumps(article, ensure_ascii=False) + "\n")
-                    fout.flush()
-                    new_count += 1
+                if article is None:
+                    continue  # cache hit or fetch error — skip sleep + skip write
+                fout.write(json.dumps(article, ensure_ascii=False) + "\n")
+                fout.flush()
+                new_count += 1
                 await asyncio.sleep(rate)
 
     print(f"  ✓ {new_count} bài → {out_file}")
