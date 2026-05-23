@@ -13,32 +13,22 @@ $py = Join-Path $root ".venv\Scripts\python.exe"
 $logFile = Join-Path $root "data\ingest-restart.log"
 $summary = Join-Path $root "data\phase2-summary.txt"
 
-function Get-ChromaCount {
-    $out = & $py -c "import chromadb; print(chromadb.PersistentClient(r'$root\data\chromadb').get_collection('meo_kb').count())" 2>$null
-    if ($out -match '^\d+$') { return [int]$out }
-    return -1
-}
+$maxRestarts = 30
 
-function Get-TotalChunks {
-    $f = Join-Path $root "data\chunks\classified.jsonl"
-    return (Get-Content $f | Measure-Object -Line).Lines
-}
-
-$target = Get-TotalChunks
-$maxRestarts = 20
-
-Add-Content -Path $summary -Value "`n[$([DateTime]::Now.ToString('HH:mm:ss'))] finish_pipeline.ps1 started (target=$target)"
+Add-Content -Path $summary -Value "`n[$([DateTime]::Now.ToString('HH:mm:ss'))] finish_pipeline.ps1 started"
 
 # ---------- Ingest loop ----------
+# Detect completion by grepping log for ingest's own "=== Done: ... ===" marker.
+# No Python sub-spawn for ChromaDB count -- spawning Python from within wrapper
+# was hanging when system silent-killer was active.
 $restartNum = 0
 while ($restartNum -lt $maxRestarts) {
     $restartNum++
-    $startCount = Get-ChromaCount
     $startTime = Get-Date
 
     Write-Host ""
     Write-Host "================================================================"
-    Write-Host "  [Ingest restart $restartNum] $startCount / $target chunks"
+    Write-Host "  [Ingest restart $restartNum] starting..."
     Write-Host "================================================================"
 
     Push-Location $root
@@ -46,21 +36,15 @@ while ($restartNum -lt $maxRestarts) {
     $exitCode = $LASTEXITCODE
     Pop-Location
 
-    $endCount = Get-ChromaCount
-    $elapsed = ((Get-Date) - $startTime).TotalSeconds
-    $added = $endCount - $startCount
-
+    $elapsed = [Math]::Round(((Get-Date) - $startTime).TotalSeconds, 0)
     Write-Host ""
-    Write-Host "  Run $restartNum done: exit=$exitCode, elapsed=${elapsed}s, +$added chunks (total=$endCount/$target)"
-    Add-Content -Path $summary -Value "  [Ingest run $restartNum] +$added -> $endCount/$target (exit=$exitCode, ${elapsed}s)"
+    Write-Host "  Run $restartNum exited (code=$exitCode, ${elapsed}s)"
+    Add-Content -Path $summary -Value "  [Ingest run $restartNum] exit=$exitCode, ${elapsed}s"
 
-    if ($endCount -ge $target) {
-        Write-Host "  [OK] Reached target $target"
-        break
-    }
-
-    if ($added -le 0 -and $elapsed -gt 60) {
-        Write-Host "  [WARN] No progress in this run, stopping"
+    # Detect natural completion via log marker
+    $lastLines = Get-Content $logFile -Tail 5 -ErrorAction SilentlyContinue
+    if ($lastLines -match "Done:.+chunks in ChromaDB") {
+        Write-Host "  [OK] Ingest reported Done — finishing loop"
         break
     }
 
