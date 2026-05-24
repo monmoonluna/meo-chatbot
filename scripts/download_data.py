@@ -24,7 +24,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument(
         "--repo-id",
-        default="monmoonluna/meo-chatbot-data",
+        default="Monmoonluna/meo-chatbot-data",
         help="HF dataset repo to pull from",
     )
     p.add_argument(

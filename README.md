@@ -76,7 +76,7 @@ huggingface-cli login  # paste token
 
 **Người clone repo** (download 1 lần):
 ```powershell
-.\.venv\Scripts\python.exe scripts\download_data.py --repo-id monmoonluna/meo-chatbot-data
+.\.venv\Scripts\python.exe scripts\download_data.py --repo-id Monmoonluna/meo-chatbot-data
 # → tải về data/chromadb + data/chunks (~1 GB)
 
 # Verify:

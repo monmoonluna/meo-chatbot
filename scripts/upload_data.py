@@ -29,7 +29,7 @@ def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument(
         "--repo-id",
-        default="monmoonluna/meo-chatbot-data",
+        default="Monmoonluna/meo-chatbot-data",
         help="HF dataset repo (username/repo-name)",
     )
     p.add_argument("--private", action="store_true", help="Create as private dataset")
