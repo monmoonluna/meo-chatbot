@@ -182,7 +182,8 @@ Trả `{"status": "ok"}` để liveness check.
 | Crawl | `httpx` + `trafilatura` | Async, robust HTML extract |
 | Chunker | Python heuristic | Section-aware, prepend heading |
 | Classifier | Rule-based VN keywords + fallback | Fast, deterministic, no LLM cost |
-| Embedding | `intfloat/multilingual-e5-small` | 384-dim, VN-EN, ~470MB local |
+| Embedding (ingest) | `sentence-transformers` + e5-small | Batched bulk encode, normalize |
+| Embedding (retriever) | `transformers` AutoModel + manual mean-pool | Robust khi sentence_transformers crash trên 1 số máy Windows (xem Troubleshooting) |
 | Vector DB | `chromadb` PersistentClient | Free, no server, embedded |
 | LLM | `gemini-2.5-flash` (fallback chain) | Free tier 1500/day |
 | API | `fastapi` + `uvicorn` | Auto OpenAPI docs cho team web |
@@ -244,6 +245,63 @@ Test suite 30 query (`scripts/eval_queries.py`):
 .\.venv\Scripts\python.exe scripts\eval_queries.py --with-llm
 ```
 
+## Troubleshooting
+
+Các vấn đề thực tế đã gặp khi cài/chạy + cách fix:
+
+### 1. `uvicorn` đứng mãi ở "Warming up retriever..."
+
+Nguyên nhân thường gặp (xếp theo khả năng cao → thấp):
+
+**a) Model chưa download xong** — `sentence_transformers` tải model im lặng không hiện progress.
+```powershell
+# Pre-download bằng hf CLI (verbose) trước khi chạy uvicorn
+.\.venv\Scripts\hf.exe download intfloat/multilingual-e5-small
+```
+
+**b) `HF_HOME` trỏ về folder rỗng** — `app/retriever.py` set `HF_HOME=D:\hf-cache` nếu có ổ D:, nhưng model thật ở `C:\Users\<user>\.cache\huggingface\`. Hai cách fix:
+```powershell
+# Option 1: unset HF_HOME, dùng default C:
+[Environment]::SetEnvironmentVariable('HF_HOME', $null, 'User')
+$env:HF_HOME = $null
+
+# Option 2: download trực tiếp về D:
+$env:HF_HOME = "D:\hf-cache"
+.\.venv\Scripts\hf.exe download intfloat/multilingual-e5-small
+```
+
+> ⚠️ **KHÔNG dùng `Move-Item` để chuyển cache từ C: sang D:** — sẽ phá symlinks/cấu trúc → SentenceTransformer tìm file không thấy → hang. Luôn re-download bằng `hf download`.
+
+### 2. `import sentence_transformers` crash Python im lặng
+
+Một số máy Windows (torch 2.12 + transformers 5.9) → segfault không trace.
+
+Đã workaround bằng cách dùng `transformers.AutoModel` thay vì `sentence_transformers` trong `app/retriever.py`. Output bit-exact identical, ChromaDB vectors giữ nguyên valid.
+
+Test phát hiện crash:
+```powershell
+python -c "import sentence_transformers; print('OK')"  # rỗng = đã crash
+python -c "from transformers import AutoModel; print('OK')"  # in OK = ổn
+```
+
+Nếu cả 2 đều fail → reinstall: `pip install --force-reinstall transformers`.
+
+### 3. HuggingFace upload hang ở 99% (file > 100MB)
+
+`huggingface_hub` Python API có bug hang ở step commit cuối. Workaround:
+```powershell
+# Kill Python đang stuck, upload từng file qua hf CLI
+.\.venv\Scripts\hf.exe upload <repo-id> <local-file> <repo-path> --repo-type dataset
+```
+
+### 4. Crawler bị OS kill sau ~17 phút (Windows Defender?)
+
+Pipeline đã có 2 layer workaround:
+- `scripts/crawl_with_restart.ps1` — PowerShell auto-restart loop
+- `scripts/setup_scheduler.ps1` — Windows Task Scheduler (resilient nhất, scheduler service ở SYSTEM level)
+
+Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill + relaunch hoặc dùng scheduler.
+
 ## Known limitations / Future work
 
 - **Behavior topic ~2-3%** trong corpus — Phase 2 sources tag `topic_hint=behavior` nhưng classifier flip nhiều sang topic khác. Tune classifier hoặc thêm nguồn behavior-only.
@@ -251,6 +309,7 @@ Test suite 30 query (`scripts/eval_queries.py`):
 - **Single-instance** — ChromaDB local, không scale horizontal. Để production cần switch lên Qdrant Cloud hoặc tương tự.
 - **`google-generativeai` deprecated** — chưa migrate sang `google-genai` (warning, không fail).
 - **OS silent-killer trên Windows** — pipeline đã có workaround (Task Scheduler) nhưng nguyên nhân chưa rõ (có thể Defender / scheduled tasks). Linux deploy sẽ không gặp.
+- **`sentence_transformers` không tin cậy trên 1 số máy Windows** — retriever đã bypass dùng `transformers` trực tiếp. Ingest vẫn dùng `sentence_transformers`; nếu fail trên máy bạn, có thể sửa `pipeline/ingest.py` theo cùng pattern hoặc download data sẵn từ HF (không cần re-ingest).
 
 ## License & Data ethics
 
