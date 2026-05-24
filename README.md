@@ -66,13 +66,19 @@ Nếu Python bị OS kill (Windows Defender quét định kỳ), dùng scheduled
 **Người chia sẻ** (upload 1 lần):
 ```powershell
 # 1. Tạo HF account + Write token: https://huggingface.co/settings/tokens
-huggingface-cli login  # paste token
+.\.venv\Scripts\hf.exe auth login   # paste token
 
 # 2. Upload (~1 GB: chromadb + classified chunks)
 .\.venv\Scripts\python.exe scripts\upload_data.py --repo-id YOUR_USERNAME/meo-chatbot-data
-# Hoặc private: thêm --private
-# Hoặc kèm cleaned: thêm --include-cleaned
+# Tuỳ chọn: --private, --include-cleaned
 ```
+
+> ⚠️ `huggingface_hub` Python API có thể hang ở step commit khi file > 100 MB.
+> Nếu upload bị stuck cuối, kill Python và dùng `hf` CLI cho file riêng lẻ:
+> ```powershell
+> .\.venv\Scripts\hf.exe upload YOUR_USERNAME/meo-chatbot-data `
+>   path\to\file path/in/repo --repo-type dataset
+> ```
 
 **Người clone repo** (download 1 lần):
 ```powershell
