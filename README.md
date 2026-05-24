@@ -61,8 +61,30 @@ Nếu Python bị OS kill (Windows Defender quét định kỳ), dùng scheduled
 .\scripts\setup_scheduler.ps1   # task chạy mỗi 10 phút, tự skip nếu đã đủ
 ```
 
-### C. Download data sẵn (chưa public)
-Sau khi vector DB ổn định, upload lên HF Datasets → bạn ấy `huggingface-cli download`.
+### C. Download data sẵn từ Hugging Face (NHANH NHẤT, ~5 phút thay vì 4h)
+
+**Người chia sẻ** (upload 1 lần):
+```powershell
+# 1. Tạo HF account + Write token: https://huggingface.co/settings/tokens
+huggingface-cli login  # paste token
+
+# 2. Upload (~1 GB: chromadb + classified chunks)
+.\.venv\Scripts\python.exe scripts\upload_data.py --repo-id YOUR_USERNAME/meo-chatbot-data
+# Hoặc private: thêm --private
+# Hoặc kèm cleaned: thêm --include-cleaned
+```
+
+**Người clone repo** (download 1 lần):
+```powershell
+.\.venv\Scripts\python.exe scripts\download_data.py --repo-id monmoonluna/meo-chatbot-data
+# → tải về data/chromadb + data/chunks (~1 GB)
+
+# Verify:
+.\.venv\Scripts\python.exe -c "import chromadb; print(chromadb.PersistentClient('data/chromadb').get_collection('meo_kb').count())"
+# Phải in: 75264
+```
+
+Sau khi download, **chạy chatbot ngay** không cần crawl/embed nữa.
 
 ## Chạy chatbot
 
