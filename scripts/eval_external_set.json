@@ -1,0 +1,59 @@
+{
+  "_meta": {
+    "description": "Cat questions sourced from public HuggingFace dataset playcat/playcat-cat-behavior-new-data-set (community Q&A: r/CatAdvice, r/AskVet, r/cats, r/CATHELP, stackexchange_pets). English originals hand-curated for quality, translated to natural Vietnamese. emer=true marks genuine vet-urgent cases.",
+    "source_dataset": "playcat/playcat-cat-behavior-new-data-set (merged_all)"
+  },
+  "questions": [
+    {"topic": "behavior", "emer": false, "en": "My cat is attacking my other cat out of nowhere!", "vi": "Mèo của tôi tự nhiên tấn công con mèo khác trong nhà, tại sao vậy?"},
+    {"topic": "behavior", "emer": false, "en": "My cat scratches me everyday", "vi": "Mèo của tôi ngày nào cũng cào tôi, làm sao để ngăn lại?"},
+    {"topic": "behavior", "emer": false, "en": "How to best work around elderly cat not using litter box?", "vi": "Mèo già không chịu dùng khay vệ sinh nữa, tôi nên xử lý thế nào?"},
+    {"topic": "behavior", "emer": false, "en": "how to maintain male spraying while waiting on neuter appointment?", "vi": "Làm sao hạn chế mèo đực xịt nước tiểu đánh dấu lãnh thổ trong lúc chờ tới lịch triệt sản?"},
+    {"topic": "behavior", "emer": false, "en": "New Kitten & Old Cat Socialization Ideas and Calming methods", "vi": "Cách giúp mèo con mới và mèo lớn tuổi làm quen với nhau, và cách trấn an chúng?"},
+    {"topic": "behavior", "emer": false, "en": "Why are my cats hissing/attacking my other cat after separating her for surgery recovery?", "vi": "Tại sao các con mèo của tôi lại gầm gừ và tấn công một con sau khi nó đi phẫu thuật về?"},
+    {"topic": "behavior", "emer": false, "en": "How can I calm my cat down", "vi": "Làm thế nào để giúp mèo bình tĩnh lại khi nó căng thẳng?"},
+
+    {"topic": "care", "emer": false, "en": "What is the safest position for a pet carrier in a car?", "vi": "Vị trí an toàn nhất để đặt lồng vận chuyển mèo trong xe hơi là ở đâu?"},
+    {"topic": "care", "emer": false, "en": "How to pick up my newly adopted older cat", "vi": "Cách bế một con mèo lớn tuổi vừa mới nhận nuôi như thế nào cho đúng?"},
+    {"topic": "care", "emer": false, "en": "How to help my coned cat with grooming?", "vi": "Mèo đang đeo vòng chống liếm, làm sao giúp nó vệ sinh lông?"},
+    {"topic": "care", "emer": false, "en": "Need advice with kitten I rescued today", "vi": "Tôi vừa cứu được một bé mèo con hôm nay, cần lời khuyên chăm sóc ban đầu."},
+    {"topic": "care", "emer": false, "en": "Any experience crate training a cat?", "vi": "Có ai có kinh nghiệm tập cho mèo quen với lồng không?"},
+
+    {"topic": "nutrition", "emer": false, "en": "How do I help my cat lose weight?", "vi": "Làm sao để giúp mèo của tôi giảm cân?"},
+    {"topic": "nutrition", "emer": false, "en": "Should I put my cat on a prescription diet?", "vi": "Tôi có nên cho mèo ăn thức ăn theo toa của bác sĩ (prescription diet) không?"},
+    {"topic": "nutrition", "emer": false, "en": "How much to feed", "vi": "Mèo trưởng thành nên được cho ăn bao nhiêu mỗi ngày?"},
+    {"topic": "nutrition", "emer": false, "en": "Is it ok to feed my 5 and 10 year old cats food labeled as 11+ senior?", "vi": "Mèo 5 tuổi và 10 tuổi của tôi ăn thức ăn ghi dành cho mèo 11+ tuổi có sao không?"},
+    {"topic": "nutrition", "emer": false, "en": "Will a cat starve if they don't like the placement of the food bowl?", "vi": "Mèo có chịu nhịn đói nếu nó không thích vị trí đặt bát thức ăn không?"},
+    {"topic": "nutrition", "emer": false, "en": "Can I give my 3 weeks old kitten baby formula? What are the health risks?", "vi": "Mèo con 3 tuần tuổi, tôi cho uống sữa công thức của em bé được không? Có rủi ro gì cho sức khỏe không?"},
+
+    {"topic": "health", "emer": false, "en": "How long to wait for a cat that's not eating?", "vi": "Mèo bỏ ăn thì nên đợi bao lâu trước khi đưa đi khám?"},
+    {"topic": "health", "emer": false, "en": "How can I stop my cat from pooping outside the litter box?", "vi": "Làm sao để mèo không đi nặng ra ngoài khay vệ sinh?"},
+    {"topic": "health", "emer": false, "en": "Should I get a second opinion about my cat's hair loss, dark spots in ear and scabby skin?", "vi": "Mèo của tôi bị rụng lông, có đốm đen trong tai và da đóng vảy, tôi có nên đi khám ở một bác sĩ thú y khác để kiểm tra lại không?"},
+    {"topic": "health", "emer": false, "en": "Help our cat won't stop peeing", "vi": "Mèo của tôi đi tiểu liên tục không ngừng, phải làm sao đây?"},
+    {"topic": "health", "emer": false, "en": "My cat keeps sneezing, what could it be?", "vi": "Mèo của tôi cứ hắt hơi liên tục, có thể là bị gì vậy?"},
+
+    {"topic": "health", "emer": true, "en": "My cat has some blood on his anus, what should I do?", "vi": "Mèo của tôi có máu ở hậu môn, tôi phải làm gì bây giờ?"},
+    {"topic": "health", "emer": true, "en": "Small amount of blood occasionally in cat stool. Concern?", "vi": "Phân mèo thỉnh thoảng có lẫn một ít máu, có đáng lo không?"},
+    {"topic": "health", "emer": true, "en": "1 y/o cat with 41C fever of unknown origin", "vi": "Mèo 1 tuổi của tôi bị sốt 41 độ C không rõ nguyên nhân, tôi nên làm gì?"},
+    {"topic": "health", "emer": true, "en": "Blood clots/mucus plugs in a cat with frequent cystitis flare ups", "vi": "Mèo của tôi bị viêm bàng quang tái phát nhiều lần và có cục máu đông trong nước tiểu, phải làm sao?"},
+    {"topic": "health", "emer": true, "en": "Should I take him to the emergency vet or wait til Monday?", "vi": "Mèo bị ốm, tôi nên đưa nó đi cấp cứu thú y ngay hay đợi đến thứ Hai?"},
+    {"topic": "health", "emer": true, "en": "Help, my cat Ace isn't peeing", "vi": "Cứu với, mèo đực của tôi đã lâu không đi tiểu được, có sao không?"},
+
+    {"topic": "breed", "emer": false, "en": "Is it OK to adopt unknown breeds?", "vi": "Nhận nuôi mèo không rõ giống thì có sao không?"},
+    {"topic": "breed", "emer": false, "en": "Is my two-year old Maine coon too lean?", "vi": "Mèo Maine Coon 2 tuổi của tôi trông hơi gầy, như vậy có bình thường không?"},
+
+    {"topic": "behavior", "emer": false, "en": "How do I introduce my cat to a new dog?", "vi": "Làm sao để cho mèo của tôi làm quen với một chú chó mới trong nhà?"},
+    {"topic": "behavior", "emer": false, "en": "My cat keeps meowing loudly at night", "vi": "Mèo của tôi cứ kêu meo meo rất to vào ban đêm, làm sao để bớt?"},
+    {"topic": "behavior", "emer": false, "en": "Why does my cat knock things off the table?", "vi": "Tại sao mèo của tôi cứ gạt đồ vật rơi khỏi bàn?"},
+    {"topic": "care", "emer": false, "en": "How often should I clean the litter box?", "vi": "Tôi nên dọn khay vệ sinh cho mèo bao lâu một lần?"},
+    {"topic": "care", "emer": false, "en": "How do I trim my cat's nails safely?", "vi": "Làm sao để cắt móng cho mèo một cách an toàn?"},
+    {"topic": "care", "emer": false, "en": "When should I start vaccinating my kitten?", "vi": "Mèo con của tôi nên bắt đầu tiêm phòng từ khi nào?"},
+    {"topic": "nutrition", "emer": false, "en": "Can cats eat raw chicken?", "vi": "Mèo ăn thịt gà sống được không?"},
+    {"topic": "nutrition", "emer": false, "en": "How much water should a cat drink per day?", "vi": "Một con mèo nên uống bao nhiêu nước mỗi ngày?"},
+    {"topic": "nutrition", "emer": false, "en": "Is wet food or dry food better for cats?", "vi": "Cho mèo ăn pate (thức ăn ướt) hay hạt khô thì tốt hơn?"},
+    {"topic": "health", "emer": false, "en": "How do I know if my cat has fleas?", "vi": "Làm sao để biết mèo của tôi có bị bọ chét không?"},
+    {"topic": "health", "emer": false, "en": "My cat's eye is watering and red", "vi": "Mắt mèo của tôi bị chảy nước và đỏ, có thể là bị gì?"},
+    {"topic": "health", "emer": true, "en": "My cat ate a string / thread, is that dangerous?", "vi": "Mèo của tôi nuốt phải sợi chỉ, như vậy có nguy hiểm không?"},
+    {"topic": "health", "emer": true, "en": "My cat has been vomiting repeatedly since yesterday", "vi": "Mèo của tôi nôn liên tục từ hôm qua đến giờ, tôi phải làm gì?"},
+    {"topic": "health", "emer": true, "en": "My cat is breathing with its mouth open", "vi": "Mèo của tôi đang há miệng ra thở, có sao không?"}
+  ]
+}

@@ -124,10 +124,16 @@ def chat(req: ChatRequest) -> ChatResponse:
             session_id=session_id,
         )
 
-    # severity=="high" is assigned only to health-topic chunks covering genuine
-    # emergencies (poisoning, seizures, FIP...). content_type=="warning" is far
-    # too broad (~22% of the KB, often benign care tips) and was flagging
-    # everyday questions as emergencies, so it no longer drives needs_vet.
+    # needs_vet stays intentionally PERMISSIVE: trigger if ANY retrieved (reranked)
+    # chunk is severity=="high". Empirically tuned on scripts/eval_external_set.json
+    # (scripts/tune_needs_vet.py): this is the only rule that keeps 6/6 emergency
+    # recall. Tighter rules (high in top-1/top-2, ≥2-of-top-3) each MISS 2-3 real
+    # emergencies because some — e.g. blood in stool, cystitis — don't rank their
+    # high-severity chunk first. Safety recall dominates here; the residual
+    # over-trigger (~7/25 benign queries) is a severity *labeling* issue (some
+    # benign chunks like travel-safety are mislabeled high) to fix in
+    # pipeline/classifier.py, NOT by weakening this gate. content_type=="warning"
+    # is far too broad (~22% of KB) and deliberately does NOT drive needs_vet.
     needs_vet = any(c.get("severity") == "high" for c in chunks)
 
     topic_counts: dict[str, int] = {}

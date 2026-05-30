@@ -26,6 +26,22 @@ COLLECTION = "meo_kb"
 E5_QUERY_PREFIX = "query: "
 MAX_LENGTH = 512
 
+# --- Reranker (cross-encoder) ---
+# e5-small là bi-encoder: cosine scores bị nén (~0.92-0.96) nên không phân biệt
+# được chunk thực sự liên quan với chunk chỉ trùng từ khoá. Cross-encoder chấm
+# điểm từng cặp (query, passage) → relevance tách bạch hơn nhiều, dùng để
+# re-rank top-N candidate từ ChromaDB rồi mới lấy top-k.
+# Dùng transformers.AutoModelForSequenceClassification trực tiếp (KHÔNG
+# FlagEmbedding/sentence_transformers) cho nhất quán + tránh crash trên Windows.
+RERANK_ENABLED = os.getenv("MEO_RERANK", "1") != "0"
+RERANKER_MODEL = os.getenv("MEO_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+# Số candidate kéo từ ChromaDB trước khi rerank (nhiều hơn k để reranker có
+# không gian sắp xếp lại). 0.0 sigmoid floor = giữ tất cả; tune qua env.
+RERANK_CANDIDATES = int(os.getenv("MEO_RERANK_CANDIDATES", "20"))
+# Floor trên rerank score (sigmoid 0-1). Chunk dưới ngưỡng bị loại → khi tất cả
+# rớt, app/main.py trả fallback "không đủ thông tin" thay vì bịa.
+RERANK_MIN_SCORE = float(os.getenv("MEO_RERANK_MIN_SCORE", "0.05"))
+
 # Conservative relevance floor. e5-small cosine scores are compressed: on-topic
 # tiếng Việt queries land ~0.96+, but English/conversational cat queries dip to
 # ~0.92, overlapping off-topic (~0.90-0.94). A floor of 0.90 only filters
@@ -38,6 +54,9 @@ DEFAULT_MIN_SCORE = float(os.getenv("MEO_MIN_SCORE", "0.90"))
 _model = None
 _tokenizer = None
 _collection = None
+_reranker = None
+_reranker_tok = None
+_rerank_disabled = False  # set True nếu load reranker fail → fallback e5 ordering
 
 
 def _ensure_hf_home():
@@ -68,10 +87,51 @@ def get_collection():
     return _collection
 
 
+def get_reranker():
+    """Load cross-encoder lazy. Trả None nếu disabled hoặc load fail (fallback e5)."""
+    global _reranker, _reranker_tok, _rerank_disabled
+    if not RERANK_ENABLED or _rerank_disabled:
+        return None
+    if _reranker is None:
+        _ensure_hf_home()
+        try:
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+            _reranker_tok = AutoTokenizer.from_pretrained(RERANKER_MODEL)
+            _reranker = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL)
+            _reranker.eval()
+        except Exception as e:  # model chưa tải / OOM / DLL issue → degrade gracefully
+            print(f"[retriever] reranker load failed ({type(e).__name__}: {e}); "
+                  f"fallback to e5 ordering. Set MEO_RERANK=0 to silence.")
+            _rerank_disabled = True
+            return None
+    return _reranker
+
+
+def _rerank(query: str, chunks: list[dict]) -> list[dict]:
+    """Chấm lại từng (query, chunk.text) bằng cross-encoder, gán rerank_score
+    (sigmoid 0-1), sort giảm dần. No-op nếu reranker không khả dụng."""
+    model = get_reranker()
+    if model is None or not chunks:
+        return chunks
+    import torch
+    pairs = [[query, c.get("text", "")] for c in chunks]
+    inputs = _reranker_tok(
+        pairs, padding=True, truncation=True, max_length=MAX_LENGTH, return_tensors="pt",
+    )
+    with torch.no_grad():
+        logits = model(**inputs).logits.view(-1)
+        scores = torch.sigmoid(logits)
+    for c, s in zip(chunks, scores.tolist()):
+        c["rerank_score"] = round(float(s), 4)
+    chunks.sort(key=lambda c: c["rerank_score"], reverse=True)
+    return chunks
+
+
 def warmup():
     """Gọi ở startup để tránh latency request đầu tiên."""
     get_model()
     get_collection()
+    get_reranker()
 
 
 def _embed_query(text: str) -> list[float]:
@@ -119,7 +179,11 @@ def retrieve(
     query_emb = _embed_query(query)
 
     where = {"topic": topic_filter} if topic_filter and topic_filter != "auto" else None
-    n_fetch = k * 3 if where else k
+    # Khi rerank: kéo nhiều candidate hơn để cross-encoder có không gian sắp lại.
+    if RERANK_ENABLED and not _rerank_disabled:
+        n_fetch = max(RERANK_CANDIDATES, k * 3 if where else k)
+    else:
+        n_fetch = k * 3 if where else k
 
     results = coll.query(
         query_embeddings=[query_emb],
@@ -137,8 +201,13 @@ def retrieve(
         chunks.append({
             "chunk_id": results["ids"][0][i],
             "text": results["documents"][0][i],
-            "score": round(score, 4),
+            "score": round(score, 4),  # e5 cosine (giữ cho citation/backward-compat)
             **meta,
         })
+
+    # Cross-encoder rerank → sort theo rerank_score, lọc floor, lấy top-k.
+    chunks = _rerank(query, chunks)
+    if any("rerank_score" in c for c in chunks):
+        chunks = [c for c in chunks if c.get("rerank_score", 0.0) >= RERANK_MIN_SCORE]
 
     return chunks[:k]

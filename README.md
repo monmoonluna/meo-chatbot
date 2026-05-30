@@ -16,9 +16,10 @@ crawler/       →  data/raw/        →  data/cleaned/   →  data/chunks/   �
                                                           metadata)         ChromaDB local)
                                                                               │
                                                                               ▼
-            POST /chat ────────► app/main.py (FastAPI)  ◄────  retriever → top-5 → Gemini
-                                                                             ▲
-                                                                  bge-m3 / e5-small embedding
+            POST /chat ──► app/main.py (FastAPI) ◄── retriever → top-20 → reranker → top-5 → Gemini
+                                                                  ▲                ▲
+                                                       e5-small embedding   bge-reranker-v2-m3
+                                                                          (cross-encoder)
 ```
 
 ## Setup (cho người clone repo)
@@ -184,6 +185,7 @@ Trả `{"status": "ok"}` để liveness check.
 | Classifier | Rule-based VN keywords + fallback | Fast, deterministic, no LLM cost |
 | Embedding (ingest) | `sentence-transformers` + e5-small | Batched bulk encode, normalize |
 | Embedding (retriever) | `transformers` AutoModel + manual mean-pool | Robust khi sentence_transformers crash trên 1 số máy Windows (xem Troubleshooting) |
+| Reranker | `bge-reranker-v2-m3` (transformers cross-encoder) | e5 cosine bị nén (~0.94-0.96); cross-encoder tách bạch relevance → top-20 rerank → top-5. Tự tắt graceful nếu model chưa tải |
 | Vector DB | `chromadb` PersistentClient | Free, no server, embedded |
 | LLM | `gemini-2.5-flash` (fallback chain) | Free tier 1500/day |
 | API | `fastapi` + `uvicorn` | Auto OpenAPI docs cho team web |
@@ -194,7 +196,10 @@ Trả `{"status": "ok"}` để liveness check.
 scripts/
 ├── progress.ps1               # Crawl progress bar (10 sources)
 ├── spot_check.py              # Sample random chunks để verify quality
-├── eval_queries.py            # 30-query suite + auto-flag issues
+├── eval_queries.py            # 30-query suite thủ công + auto-flag issues
+├── eval_external.py           # External suite: câu hỏi dataset công khai + LLM-judge
+├── eval_external_set.json     # 45 câu hỏi thật (playcat Q&A) đã dịch VN
+├── tune_needs_vet.py          # So sánh các rule needs_vet trên external set
 ├── test_retrieval.py          # Test retrieval không cần Gemini key
 ├── crawl_with_restart.ps1     # Auto-restart crawler (silent kill resilient)
 ├── run_phase2_pipeline.ps1    # Omnibus crawl → chunk → classify → ingest → eval
@@ -228,7 +233,7 @@ meo-chatbot/
 
 ## Đánh giá chất lượng
 
-Test suite 30 query (`scripts/eval_queries.py`):
+### A. Internal suite — 30 query thủ công (`scripts/eval_queries.py`)
 
 | Metric | Score |
 |---|---|
@@ -238,12 +243,43 @@ Test suite 30 query (`scripts/eval_queries.py`):
 | Multi-topic queries | 5/5 OK |
 
 ```powershell
-# Retrieval-only (không tốn Gemini quota)
-.\.venv\Scripts\python.exe scripts\eval_queries.py
-
-# Full RAG với LLM
-.\.venv\Scripts\python.exe scripts\eval_queries.py --with-llm
+.\.venv\Scripts\python.exe scripts\eval_queries.py            # retrieval-only
+.\.venv\Scripts\python.exe scripts\eval_queries.py --with-llm # full RAG
 ```
+
+### B. External suite — câu hỏi thật từ dataset công khai (`scripts/eval_external.py`)
+
+45 câu hỏi mèo thật trích từ HuggingFace `playcat/playcat-cat-behavior-new-data-set`
+(community Q&A: r/CatAdvice, r/AskVet, r/cats, r/CATHELP, StackExchange Pets), dịch
+sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật. Bộ câu hỏi ở
+`scripts/eval_external_set.json`. Có thêm **LLM-as-judge** (Gemini chấm faithfulness
++ helpfulness 1-5).
+
+```powershell
+# Full RAG + judge (tốn ~2 Gemini call/câu)
+.\.venv\Scripts\python.exe scripts\eval_external.py --with-llm --judge
+```
+
+**Baseline (trước cải tiến)** phát hiện 3 vấn đề → đã fix:
+
+| Vấn đề (baseline) | Fix |
+|---|---|
+| Citations `[n]` rớt ~42% (18/31) | Prompt bắt buộc + ví dụ mẫu (`app/prompts.py`) |
+| e5 cosine bị nén → topic precision thấp, give-up | **Cross-encoder rerank** top-20→top-5 (`app/retriever.py`) |
+| `needs_vet` over-trigger ~1/3 câu lành tính | Giữ rule permissive (xem dưới) — fix gốc ở classifier |
+
+**`needs_vet` — tune bằng `scripts/tune_needs_vet.py`** (an toàn > precision):
+
+| Rule | Emergency recall | False-positive |
+|---|---|---|
+| `any high in top-5` (đang dùng) | **6/6** | 7/25 |
+| `high in top-2` | 4/6 ❌ | 3/25 |
+| `high in top-1` | 3/6 ❌ | 1/25 |
+
+Các rule chặt hơn **bỏ sót 2-3 ca cấp cứu thật** (vd máu trong phân, viêm bàng
+quang — chunk severity=high không phải lúc nào cũng rank 1) → giữ rule permissive,
+chấp nhận over-trigger. Over-trigger còn lại là do **mislabel severity** ở
+`pipeline/classifier.py`, không phải lỗi gate.
 
 ## Troubleshooting
 
@@ -305,6 +341,9 @@ Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill +
 ## Known limitations / Future work
 
 - **Behavior topic ~2-3%** trong corpus — Phase 2 sources tag `topic_hint=behavior` nhưng classifier flip nhiều sang topic khác. Tune classifier hoặc thêm nguồn behavior-only.
+- **Severity over-labeling** — một số chunk lành tính (vd "an toàn khi di chuyển bằng xe") bị gán `severity=high` → `needs_vet` over-trigger ~7/25 câu lành tính trong external suite. Fix gốc: tune `pipeline/classifier.py`, KHÔNG siết `needs_vet` gate (sẽ bỏ sót cấp cứu — xem Đánh giá chất lượng phần B).
+- **Breed coverage mỏng** — community Q&A gần như không có câu hỏi giống; KB breed chủ yếu dựa champetsfamily. Cần thêm nguồn breed-specific (sitemap phải verify thật, đừng đoán URL).
+- **Reranker tăng latency** — bge-reranker-v2-m3 chấm 20 cặp/query trên CPU (~5-8s). Set `MEO_RERANK=0` để tắt (fallback e5 ordering) nếu cần nhanh; hoặc chạy GPU.
 - **Stateless** — `session_id` chỉ trả về, không lưu lịch sử. Team web phải gửi `messages[]` mỗi request hoặc tự lưu Redis.
 - **Single-instance** — ChromaDB local, không scale horizontal. Để production cần switch lên Qdrant Cloud hoặc tương tự.
 - **`google-generativeai` deprecated** — chưa migrate sang `google-genai` (warning, không fail).
