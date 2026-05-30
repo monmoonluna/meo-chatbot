@@ -26,6 +26,14 @@ COLLECTION = "meo_kb"
 E5_QUERY_PREFIX = "query: "
 MAX_LENGTH = 512
 
+# Conservative relevance floor. e5-small cosine scores are compressed: on-topic
+# tiếng Việt queries land ~0.96+, but English/conversational cat queries dip to
+# ~0.92, overlapping off-topic (~0.90-0.94). A floor of 0.90 only filters
+# blatant mismatches (coding/weather/recipe questions) without rejecting real
+# cat questions — when everything falls below it, app/main.py returns the
+# "không đủ thông tin" fallback instead of answering from irrelevant chunks.
+DEFAULT_MIN_SCORE = float(os.getenv("MEO_MIN_SCORE", "0.90"))
+
 # Lazy singletons — khởi tạo 1 lần per process
 _model = None
 _tokenizer = None
@@ -98,9 +106,15 @@ def retrieve(
     query: str,
     k: int = 5,
     topic_filter: Optional[str] = None,
-    min_score: float = 0.0,
+    min_score: Optional[float] = None,
 ) -> list[dict]:
-    """Embed query → search top-k chunks → return list of dicts với metadata + score."""
+    """Embed query → search top-k chunks → return list of dicts với metadata + score.
+
+    min_score=None → dùng DEFAULT_MIN_SCORE (env MEO_MIN_SCORE, mặc định 0.90).
+    Truyền 0.0 để tắt floor (vd: debug/eval muốn xem raw scores).
+    """
+    if min_score is None:
+        min_score = DEFAULT_MIN_SCORE
     coll = get_collection()
     query_emb = _embed_query(query)
 

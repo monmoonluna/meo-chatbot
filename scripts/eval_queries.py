@@ -94,10 +94,9 @@ def flag_issues(query: dict, chunks: list[dict], reply: str | None) -> list[str]
     if top["score"] < 0.75:
         flags[-1] = flags[-1].replace("🟡", "🔴")
 
-    # needs_vet expected
+    # needs_vet expected — phải khớp logic trong app/main.py (chỉ severity=high)
     if "exp_needs_vet" in query:
-        actual = any(c.get("severity") == "high" or c.get("content_type") == "warning"
-                     for c in chunks)
+        actual = any(c.get("severity") == "high" for c in chunks)
         if query["exp_needs_vet"] and not actual:
             flags.append("🔴 NEEDS_VET: expected=True, got=False")
         elif not query["exp_needs_vet"] and actual:
