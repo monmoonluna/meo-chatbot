@@ -260,19 +260,21 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 .\.venv\Scripts\python.exe scripts\eval_external.py --with-llm --judge
 ```
 
-**Kết quả đo — retrieval + safety** (45 câu, đo lại 2 lần ra cùng số → ổn định,
-không phụ thuộc LLM):
+**Kết quả đo** (45 câu, run `--judge` đầy đủ, 5 key xoay vòng nên không bị quota chặn):
 
 | Metric | Score | Ghi chú |
 |---|---|---|
 | Topic match (top-5 majority) | **34/45** (76%) | sau khi thêm reranker |
 | Emergency → `needs_vet=true` | **9/9** (100%) | recall cấp cứu tuyệt đối |
-| Over-trigger (câu lành tính) | **10/36** (28%) | severity mislabel — xem dưới |
+| Emergency có banner ⚠️ | **9/9** (100%) | banner server-side, không phụ thuộc LLM |
+| Over-trigger (câu lành tính) | **8/36** (22%) | sau khi thêm rerank-relevance gate (was 10/36) |
+| Grounded (không bỏ cuộc) | **42/45** (93%) | |
+| Có citation `[n]` | **37/45** (82%) | |
+| **Faithfulness** (LLM-judge 1-5) | **4.86** | mọi khẳng định có context chống lưng |
+| **Helpfulness** (LLM-judge 1-5) | **4.69** | trả lời đúng trọng tâm câu hỏi |
 
-> **Faithfulness / helpfulness (LLM-as-judge): chưa có số sạch.** Free-tier
-> Gemini cạn quota ngày (RPD) khi chạy cả batch → phần lớn reply là lỗi
-> `ResourceExhausted`. Chạy lại `--judge` sau khi quota reset (hoặc bật billing)
-> để điền. *KHÔNG* lấy số faithfulness từ run bị quota chặn — nó vô nghĩa.
+> Đo với chuỗi model `gemini-2.5-flash → 2.5-flash-lite → 2.0-flash → 2.0-flash-lite`
+> và xoay vòng nhiều API key (`GEMINI_API_KEYS`) để tránh cạn quota free-tier giữa batch.
 
 **Baseline (trước cải tiến)** phát hiện 3 vấn đề → đã fix:
 
@@ -280,20 +282,27 @@ không phụ thuộc LLM):
 |---|---|
 | Citations `[n]` rớt ~42% (18/31) | Prompt bắt buộc + ví dụ mẫu (`app/prompts.py`) |
 | e5 cosine bị nén → topic precision thấp, give-up | **Cross-encoder rerank** top-20→top-5 (`app/retriever.py`) |
-| `needs_vet` over-trigger ~1/3 câu lành tính | Giữ rule permissive (xem dưới) — fix gốc ở classifier |
+| `needs_vet` over-trigger ~1/3 câu lành tính | Rerank-relevance gate (xem dưới) → còn 8/36 |
 
-**`needs_vet` — tune bằng `scripts/tune_needs_vet.py`** (an toàn > precision):
+**`needs_vet` — rerank-relevance gate** (an toàn > precision): chunk `severity=high`
+chỉ bật cảnh báo khi nó đủ **liên quan** (`rerank_score >= 0.5`); nếu reranker
+tắt/hỏng thì fallback về "any high" để không bao giờ tắt cảnh báo ngầm.
 
-| Rule | Emergency recall | False-positive |
+| Rule | Emergency recall | Over-trigger |
 |---|---|---|
-| `any high in top-5` (đang dùng) | **6/6** | 7/25 |
-| `high in top-2` | 4/6 ❌ | 3/25 |
-| `high in top-1` | 3/6 ❌ | 1/25 |
+| `any high in top-5` (cũ) | **9/9** | 10/36 |
+| `high + rerank_score>=0.5` (đang dùng) | **9/9** | **8/36** |
+| `high in top-2` | 4/6 ❌ | — |
+| `high in top-1` | 3/6 ❌ | — |
 
-Các rule chặt hơn **bỏ sót 2-3 ca cấp cứu thật** (vd máu trong phân, viêm bàng
-quang — chunk severity=high không phải lúc nào cũng rank 1) → giữ rule permissive,
-chấp nhận over-trigger. Over-trigger còn lại là do **mislabel severity** ở
-`pipeline/classifier.py`, không phải lỗi gate.
+Các rule "rank-based" chặt hơn **bỏ sót ca cấp cứu thật** (vd máu trong phân, viêm
+bàng quang — chunk severity=high không phải lúc nào cũng rank 1). Rerank gate giữ
+9/9 recall (sàn `rerank_score` của chunk-high ở câu cấp cứu = 0.937) mà loại các
+flag rõ ràng sai (Maine Coon gầy `rr=0.11`, mèo gạt đồ vật `rr=0.25`). Over-trigger
+còn lại là do **mislabel severity** ở `pipeline/classifier.py` — fix gốc sau.
+
+Khi `needs_vet=true`, server **tự prepend banner ⚠️** (không phụ thuộc LLM tự chèn —
+eval cho thấy LLM bỏ sót 9/9). Logic: `app/main.py:_compute_needs_vet`.
 
 ## Troubleshooting
 
