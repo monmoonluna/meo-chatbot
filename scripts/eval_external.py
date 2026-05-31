@@ -45,36 +45,40 @@ CHỈ trả về JSON đúng định dạng, không giải thích thêm:
 
 
 def judge_reply(question: str, chunks: list[dict], reply: str) -> dict | None:
-    """Dùng Gemini làm giám khảo chấm faithfulness + helpfulness. None nếu lỗi."""
-    import os
-    key = os.getenv("GEMINI_API_KEY")
-    if not key:
+    """Dùng Gemini làm giám khảo chấm faithfulness + helpfulness. None nếu lỗi.
+
+    Xoay vòng tất cả key (GEMINI_API_KEYS / _1.._N / GEMINI_API_KEY) × model
+    để chịu được quota free tier như app.llm.generate_reply.
+    """
+    from app.llm import DEFAULT_MODELS, gemini_api_keys
+    keys = gemini_api_keys()
+    if not keys:
         return None
     import google.generativeai as genai
-    genai.configure(api_key=key)
     ctx = "\n\n".join(
         f"[{i+1}] (topic={c.get('topic')}, sev={c.get('severity')}) {c.get('text','')[:600]}"
         for i, c in enumerate(chunks)
     )
     prompt = f"CÂU HỎI: {question}\n\nCONTEXT:\n{ctx}\n\nCÂU TRẢ LỜI:\n{reply}"
-    for model_name in ("gemini-2.5-flash", "gemini-2.5-flash-lite",
-                        "gemini-2.0-flash", "gemini-2.0-flash-lite"):
-        try:
-            model = genai.GenerativeModel(
-                model_name, system_instruction=JUDGE_PROMPT,
-                generation_config={"temperature": 0.0, "max_output_tokens": 256,
-                                   "response_mime_type": "application/json"},
-            )
-            raw = model.generate_content(prompt).text
-            d = json.loads(raw)
-            return {"faithfulness": int(d["faithfulness"]),
-                    "helpfulness": int(d["helpfulness"]),
-                    "note": str(d.get("note", ""))[:200]}
-        except Exception as e:
-            err = str(e).lower()
-            if "429" in err or "quota" in err:
-                continue
-            return None
+    for key in keys:
+        genai.configure(api_key=key)
+        for model_name in DEFAULT_MODELS:
+            try:
+                model = genai.GenerativeModel(
+                    model_name, system_instruction=JUDGE_PROMPT,
+                    generation_config={"temperature": 0.0, "max_output_tokens": 256,
+                                       "response_mime_type": "application/json"},
+                )
+                raw = model.generate_content(prompt).text
+                d = json.loads(raw)
+                return {"faithfulness": int(d["faithfulness"]),
+                        "helpfulness": int(d["helpfulness"]),
+                        "note": str(d.get("note", ""))[:200]}
+            except Exception as e:
+                err = str(e).lower()
+                if "429" in err or "quota" in err or "exceeded" in err or "resourceexhausted" in err:
+                    continue  # model/key kế tiếp
+                return None
     return None
 
 
