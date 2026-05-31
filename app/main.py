@@ -65,6 +65,39 @@ RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MIN", "20"))
 _RATE_WINDOW_SEC = 60.0
 _request_log: dict[str, deque[float]] = defaultdict(deque)
 
+# needs_vet gate: 1 chunk severity=="high" chỉ kích hoạt cảnh báo thú y khi nó
+# đủ LIÊN QUAN (rerank_score >= ngưỡng). Dry-run trên eval_external_set.json:
+# sàn rerank_score của chunk-high ở 9/9 câu cấp cứu = 0.937 → ngưỡng 0.5 giữ
+# 9/9 recall mà loại các flag rõ ràng sai (Maine Coon gầy rr=0.11, mèo gạt đồ
+# rr=0.25). Khi reranker tắt/hỏng (rerank_score None hoặc 0) → fallback về
+# "any high" để an toàn tuyệt đối. Đặt 0 để tắt gate (về hành vi cũ).
+NEEDS_VET_MIN_RR = float(os.getenv("MEO_NEEDS_VET_MIN_RR", "0.5"))
+
+# Banner cảnh báo thú y, server-side prepend khi needs_vet=True. Trước đây phụ
+# thuộc LLM tự chèn → eval cho thấy LLM bỏ sót 9/9 → ép server-side để chắc chắn.
+_VET_BANNER = (
+    "⚠️ **Dấu hiệu này có thể nghiêm trọng — hãy đưa mèo đến bác sĩ thú y để được "
+    "khám trực tiếp.** Thông tin dưới đây chỉ mang tính tham khảo, không thay thế "
+    "chẩn đoán của thú y.\n\n"
+)
+
+
+def _compute_needs_vet(chunks: list[dict]) -> bool:
+    """True nếu có chunk severity=='high' VÀ đủ liên quan (rerank_score >= ngưỡng).
+
+    Khi rerank_score thiếu (None) hoặc reranker tắt (0 cho mọi chunk high) →
+    fallback về "any high" để giữ an toàn (recall ưu tiên hơn precision).
+    """
+    high = [c for c in chunks if c.get("severity") == "high"]
+    if not high:
+        return False
+    if NEEDS_VET_MIN_RR <= 0:
+        return True
+    rrs = [c.get("rerank_score") for c in high]
+    if all(rr is None or rr == 0 for rr in rrs):
+        return True  # reranker off/failed → đừng tắt cảnh báo
+    return any(rr is not None and rr >= NEEDS_VET_MIN_RR for rr in rrs)
+
 
 def _client_ip(request: Request) -> str:
     fwd = request.headers.get("x-forwarded-for")
@@ -124,17 +157,11 @@ def chat(req: ChatRequest) -> ChatResponse:
             session_id=session_id,
         )
 
-    # needs_vet stays intentionally PERMISSIVE: trigger if ANY retrieved (reranked)
-    # chunk is severity=="high". Empirically tuned on scripts/eval_external_set.json
-    # (scripts/tune_needs_vet.py): this is the only rule that keeps 6/6 emergency
-    # recall. Tighter rules (high in top-1/top-2, ≥2-of-top-3) each MISS 2-3 real
-    # emergencies because some — e.g. blood in stool, cystitis — don't rank their
-    # high-severity chunk first. Safety recall dominates here; the residual
-    # over-trigger (~7/25 benign queries) is a severity *labeling* issue (some
-    # benign chunks like travel-safety are mislabeled high) to fix in
-    # pipeline/classifier.py, NOT by weakening this gate. content_type=="warning"
-    # is far too broad (~22% of KB) and deliberately does NOT drive needs_vet.
-    needs_vet = any(c.get("severity") == "high" for c in chunks)
+    # needs_vet: chunk severity=="high" CHỈ kích hoạt khi đủ liên quan
+    # (rerank_score >= NEEDS_VET_MIN_RR). Dry-run trên eval_external_set.json giữ
+    # 9/9 recall cấp cứu (sàn rr của chunk-high = 0.937) đồng thời loại flag sai
+    # rõ ràng (Maine Coon gầy rr=0.11, mèo gạt đồ rr=0.25). Xem _compute_needs_vet.
+    needs_vet = _compute_needs_vet(chunks)
 
     topic_counts: dict[str, int] = {}
     for c in chunks:
@@ -147,6 +174,11 @@ def chat(req: ChatRequest) -> ChatResponse:
         chunks,
         user_level=req.user_level,
     )
+
+    # Server-side: ép banner cảnh báo thú y khi needs_vet (không phụ thuộc LLM
+    # tự chèn — eval cho thấy LLM bỏ sót). Tránh nhân đôi nếu reply đã mở bằng ⚠.
+    if needs_vet and not reply.lstrip().startswith("⚠"):
+        reply = _VET_BANNER + reply
 
     citations = [
         Citation(
