@@ -1,9 +1,14 @@
 """LLM wrapper — Gemini với fallback graceful + tự retry model khác khi quota cạn.
 
 Model thử theo thứ tự (ENV GEMINI_MODEL override nếu set):
-  1. gemini-2.5-flash       (newest, free tier rộng trong 2026)
+  1. gemini-2.5-flash       (mặc định, chất lượng tốt nhất trong chuỗi)
   2. gemini-2.5-flash-lite  (lighter, quota cao hơn)
-  3. gemini-1.5-flash       (older fallback)
+  3. gemini-2.0-flash       (fallback — quota free tier riêng → thêm headroom)
+  4. gemini-2.0-flash-lite  (fallback cuối)
+
+Lưu ý: gemini-1.5-flash đã bị Google gỡ (404 NotFound) — KHÔNG đưa lại vào
+chuỗi. Mỗi model có hạn ngạch free tier riêng nên xếp nhiều model giúp tránh
+cạn quota giữa chừng (429) như đã gặp khi chạy eval batch lớn.
 """
 
 from __future__ import annotations
@@ -19,7 +24,8 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="google.generat
 DEFAULT_MODELS = [
     "gemini-2.5-flash",
     "gemini-2.5-flash-lite",
-    "gemini-1.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
 ]
 
 _configured = False
