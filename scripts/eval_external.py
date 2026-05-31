@@ -57,7 +57,8 @@ def judge_reply(question: str, chunks: list[dict], reply: str) -> dict | None:
         for i, c in enumerate(chunks)
     )
     prompt = f"CÂU HỎI: {question}\n\nCONTEXT:\n{ctx}\n\nCÂU TRẢ LỜI:\n{reply}"
-    for model_name in ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"):
+    for model_name in ("gemini-2.5-flash", "gemini-2.5-flash-lite",
+                        "gemini-2.0-flash", "gemini-2.0-flash-lite"):
         try:
             model = genai.GenerativeModel(
                 model_name, system_instruction=JUDGE_PROMPT,
