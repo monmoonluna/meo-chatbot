@@ -66,11 +66,15 @@ def judge_reply(question: str, chunks: list[dict], reply: str) -> dict | None:
             try:
                 model = genai.GenerativeModel(
                     model_name, system_instruction=JUDGE_PROMPT,
-                    generation_config={"temperature": 0.0, "max_output_tokens": 256,
+                    # 2.5-flash dùng "thinking tokens" ăn vào ngân sách output →
+                    # 256 quá nhỏ, JSON bị cắt (finish_reason=MAX_TOKENS). Để 1024.
+                    generation_config={"temperature": 0.0, "max_output_tokens": 1024,
                                        "response_mime_type": "application/json"},
                 )
                 raw = model.generate_content(prompt).text
-                d = json.loads(raw)
+                d = _parse_judge_json(raw)
+                if d is None:
+                    continue  # JSON hỏng/cắt → thử model/key kế tiếp
                 return {"faithfulness": int(d["faithfulness"]),
                         "helpfulness": int(d["helpfulness"]),
                         "note": str(d.get("note", ""))[:200]}
@@ -79,6 +83,30 @@ def judge_reply(question: str, chunks: list[dict], reply: str) -> dict | None:
                 if "429" in err or "quota" in err or "exceeded" in err or "resourceexhausted" in err:
                     continue  # model/key kế tiếp
                 return None
+    return None
+
+
+def _parse_judge_json(raw: str) -> dict | None:
+    """Bóc JSON từ output của judge dù model có bọc ```json / thêm lời dẫn.
+
+    Trả None nếu không tìm được object hợp lệ có đủ faithfulness+helpfulness.
+    """
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        pass
+    import re
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        return None
+    try:
+        d = json.loads(m.group(0))
+        if "faithfulness" in d and "helpfulness" in d:
+            return d
+    except Exception:
+        return None
     return None
 
 
