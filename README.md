@@ -320,6 +320,15 @@ là cái giá phải trả cho recall 9/9. (Script kiểm chứng: parse `eval_e
 Khi `needs_vet=true`, server **tự prepend banner ⚠️** (không phụ thuộc LLM tự chèn —
 eval cho thấy LLM bỏ sót 9/9). Logic: `app/main.py:_compute_needs_vet`.
 
+**Topic routing 34/45 — đã thử đổi cách bình chọn, KẾT LUẬN: không phải lỗi voting.**
+`topic_detected` hiện lấy `topic` xuất hiện nhiều nhất trong top-5 (count majority).
+Thử thay bằng **rerank-weighted** và **e5-score-weighted** voting (validate offline
+trên đúng top-5 đã retrieve): cả 3 cho **đúng 34/45, sai y hệt các câu giống nhau**.
+Mọi ca mis-route đều sụp về `health` (câu breed/care bị kéo về health) — đây là vấn
+đề **phân loại topic của KB + mất cân bằng nguồn** (KB health áp đảo, breed mỏng),
+không phải cách đếm phiếu. → Không ship đổi voting (no-op). Hướng cải thiện thật:
+bổ sung nguồn breed-specific + cân bằng lại KB (xem "Hạn chế đã biết").
+
 ## Troubleshooting
 
 Các vấn đề thực tế đã gặp khi cài/chạy + cách fix:
