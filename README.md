@@ -260,6 +260,20 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 .\.venv\Scripts\python.exe scripts\eval_external.py --with-llm --judge
 ```
 
+**Kết quả đo — retrieval + safety** (45 câu, đo lại 2 lần ra cùng số → ổn định,
+không phụ thuộc LLM):
+
+| Metric | Score | Ghi chú |
+|---|---|---|
+| Topic match (top-5 majority) | **34/45** (76%) | sau khi thêm reranker |
+| Emergency → `needs_vet=true` | **9/9** (100%) | recall cấp cứu tuyệt đối |
+| Over-trigger (câu lành tính) | **10/36** (28%) | severity mislabel — xem dưới |
+
+> **Faithfulness / helpfulness (LLM-as-judge): chưa có số sạch.** Free-tier
+> Gemini cạn quota ngày (RPD) khi chạy cả batch → phần lớn reply là lỗi
+> `ResourceExhausted`. Chạy lại `--judge` sau khi quota reset (hoặc bật billing)
+> để điền. *KHÔNG* lấy số faithfulness từ run bị quota chặn — nó vô nghĩa.
+
 **Baseline (trước cải tiến)** phát hiện 3 vấn đề → đã fix:
 
 | Vấn đề (baseline) | Fix |
