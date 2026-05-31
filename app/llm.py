@@ -51,24 +51,26 @@ def gemini_api_keys() -> list[str]:
     Gộp từ GEMINI_API_KEYS (phân tách , / khoảng trắng / xuống dòng),
     GEMINI_API_KEY, và GEMINI_API_KEY_1..10.
     """
-    raw: list[str] = []
-    multi = os.getenv("GEMINI_API_KEYS")
-    if multi:
-        raw += re.split(r"[,\s]+", multi.strip())
-    single = os.getenv("GEMINI_API_KEY")
-    if single:
-        raw.append(single)
+    # Gộp giá trị thô từ mọi nguồn rồi tách trên dấu phẩy/khoảng trắng. API key
+    # Gemini (AIza...) không bao giờ chứa dấu phẩy/khoảng trắng, nên tách an toàn
+    # — cho phép dồn nhiều key vào 1 biến GEMINI_API_KEY="k1,k2,..." cũng chạy.
+    sources: list[str] = []
+    for name in ("GEMINI_API_KEYS", "GEMINI_API_KEY"):
+        v = os.getenv(name)
+        if v:
+            sources.append(v)
     for i in range(1, 11):
-        k = os.getenv(f"GEMINI_API_KEY_{i}")
-        if k:
-            raw.append(k)
+        v = os.getenv(f"GEMINI_API_KEY_{i}")
+        if v:
+            sources.append(v)
     seen: set[str] = set()
     out: list[str] = []
-    for k in raw:
-        k = k.strip()
-        if k and k not in seen:
-            seen.add(k)
-            out.append(k)
+    for src in sources:
+        for k in re.split(r"[,\s]+", src.strip()):
+            k = k.strip()
+            if k and k not in seen:
+                seen.add(k)
+                out.append(k)
     return out
 
 
