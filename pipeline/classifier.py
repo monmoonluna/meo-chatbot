@@ -52,7 +52,10 @@ TOPIC_KEYWORDS: dict[str, list[str]] = {
     ],
     "nutrition": [
         "thức ăn", "dinh dưỡng", "khẩu phần", "calo", "protein",
-        "pate", "hạt khô", "thịt", "cá", "sữa", "snack", "thưởng",
+        # "cá" trần (2 ký tự) khớp nhầm "các" (từ cực phổ biến) như substring →
+        # bơm điểm nutrition sai ở 82% lần khớp. Thay bằng cụm cá cụ thể.
+        "pate", "hạt khô", "thịt", "cá hồi", "cá ngừ", "thịt cá", "ăn cá",
+        "sữa", "snack", "thưởng",
         "vitamin", "khoáng", "taurine", "omega", "amino acid",
         "aafco", "kcal", "wet food", "dry food", "raw", "homemade",
         "biếng ăn", "bỏ ăn", "kén ăn", "ăn vặt",

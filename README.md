@@ -320,14 +320,27 @@ là cái giá phải trả cho recall 9/9. (Script kiểm chứng: parse `eval_e
 Khi `needs_vet=true`, server **tự prepend banner ⚠️** (không phụ thuộc LLM tự chèn —
 eval cho thấy LLM bỏ sót 9/9). Logic: `app/main.py:_compute_needs_vet`.
 
-**Topic routing 34/45 — đã thử đổi cách bình chọn, KẾT LUẬN: không phải lỗi voting.**
-`topic_detected` hiện lấy `topic` xuất hiện nhiều nhất trong top-5 (count majority).
-Thử thay bằng **rerank-weighted** và **e5-score-weighted** voting (validate offline
-trên đúng top-5 đã retrieve): cả 3 cho **đúng 34/45, sai y hệt các câu giống nhau**.
-Mọi ca mis-route đều sụp về `health` (câu breed/care bị kéo về health) — đây là vấn
-đề **phân loại topic của KB + mất cân bằng nguồn** (KB health áp đảo, breed mỏng),
-không phải cách đếm phiếu. → Không ship đổi voting (no-op). Hướng cải thiện thật:
-bổ sung nguồn breed-specific + cân bằng lại KB (xem "Hạn chế đã biết").
+**Topic routing 34/45 — điều tra kỹ: phần lớn là *artifact của thước đo*, không phải
+lỗi truy hồi.** `topic_detected` = `topic` xuất hiện nhiều nhất trong top-5 (count
+majority). Ba phát hiện (validate offline trên đúng top-5 đã retrieve):
+
+1. **Đổi cách bình chọn là no-op.** count = rerank-weighted = e5-weighted → **đúng
+   y hệt 34/45**, sai cùng các câu. Không ship đổi voting.
+2. **Recall thực = 41/45 (91%).** Trong 11 ca "sai", **7 ca** topic đúng VẪN nằm
+   trong top-5 nhưng bị majority-vote đè; nội dung truy hồi đúng (vd "mèo con tiêm
+   phòng khi nào" → top hit *Lịch Tiêm Phòng Cho Mèo Con* rr=0.999, chỉ "sai" vì
+   tiêm phòng gắn nhãn `health` còn test-set kỳ vọng `care`). Đây là **chồng lấn
+   taxonomy**, không phải answer sai (faithfulness 4.86 xác nhận). Chỉ **~1 ca** là
+   thiếu nội dung thật (Maine Coon gầy — body-condition theo giống, rr cao nhất 0.42).
+   → Crawl thêm KB **không đáng** cho 1 ca; "76%" đánh giá thấp chất lượng thực.
+3. **Một bug nhãn ĐÃ fix:** keyword nutrition `"cá"` (2 ký tự) khớp nhầm `"các"`
+   (từ tiếng Việt cực phổ biến) như substring → fire ở **69.363/75.264 chunk (92%)**,
+   trong đó **82% là nhiễu `các`** chứ không phải cá (thức ăn). Bơm điểm nutrition sai
+   → flip nhầm (vd nội dung "giới thiệu thú cưng mới" bị gắn `nutrition`). Fix: thay
+   `"cá"` trần bằng cụm cụ thể (`cá hồi`, `cá ngừ`, `thịt cá`, `ăn cá`). Kết quả
+   re-classify: `nutrition` 14%→8% (bỏ nhãn thừa), `health` **+1.460 chunk** (severity
+   `high` 10.590→10.765 → cảnh báo cấp cứu MẠNH hơn, không yếu đi), chỉ 7 chunk rời
+   health. Áp dụng bằng `pipeline.ingest` update metadata-only (không re-embed).
 
 ## Troubleshooting
 
