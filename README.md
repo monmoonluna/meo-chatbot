@@ -298,8 +298,24 @@ tắt/hỏng thì fallback về "any high" để không bao giờ tắt cảnh b
 Các rule "rank-based" chặt hơn **bỏ sót ca cấp cứu thật** (vd máu trong phân, viêm
 bàng quang — chunk severity=high không phải lúc nào cũng rank 1). Rerank gate giữ
 9/9 recall (sàn `rerank_score` của chunk-high ở câu cấp cứu = 0.937) mà loại các
-flag rõ ràng sai (Maine Coon gầy `rr=0.11`, mèo gạt đồ vật `rr=0.25`). Over-trigger
-còn lại là do **mislabel severity** ở `pipeline/classifier.py` — fix gốc sau.
+flag rõ ràng sai (Maine Coon gầy `rr=0.11`, mèo gạt đồ vật `rr=0.25`).
+
+**Còn 8/36 over-trigger — đã thử fix ở classifier, KẾT LUẬN: không nên.** Phân tích
+10.590 chunk `high` cho thấy phần lớn được gán high vì keyword nặng (vd `khó thở`,
+`khối u`, `tử vong`) nằm trong **body** như nhắc thoáng qua, không phải tiêu đề. Thử
+2 rule chặt hơn (validate offline trên đúng chunk v3 đã retrieve):
+
+| Rule severity | Emergency recall | Over-trigger |
+|---|---|---|
+| `any HIGH_SEVERITY kw` (đang dùng) | **9/9** | 8/36 |
+| kw phải nằm trong **title** | 4/9 ❌ | 2/36 |
+| hybrid (kw cấp tính ở body OK, tên bệnh mãn tính chỉ tính ở title) | 7/9 ❌ | 7/36 |
+
+→ **Mọi rule giảm over-trigger đều giảm recall cấp cứu, tỉ lệ tệ hơn 1:1** (hybrid
+mất 2 ca thật — viêm bàng quang tái phát, nôn liên tục — để đổi lấy 1 ca lành tính).
+Lý do: keyword-nặng-trong-body vừa gây over-trigger lành tính VỪA là tín hiệu bắt
+cấp cứu thật — **không tách được**. Rerank gate là đòn bẩy an toàn duy nhất; 8/36
+là cái giá phải trả cho recall 9/9. (Script kiểm chứng: parse `eval_external_results_v3.md`.)
 
 Khi `needs_vet=true`, server **tự prepend banner ⚠️** (không phụ thuộc LLM tự chèn —
 eval cho thấy LLM bỏ sót 9/9). Logic: `app/main.py:_compute_needs_vet`.
@@ -364,7 +380,7 @@ Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill +
 ## Known limitations / Future work
 
 - **Behavior topic ~2-3%** trong corpus — Phase 2 sources tag `topic_hint=behavior` nhưng classifier flip nhiều sang topic khác. Tune classifier hoặc thêm nguồn behavior-only.
-- **Severity over-labeling** — một số chunk lành tính (vd "an toàn khi di chuyển bằng xe") bị gán `severity=high` → `needs_vet` over-trigger ~7/25 câu lành tính trong external suite. Fix gốc: tune `pipeline/classifier.py`, KHÔNG siết `needs_vet` gate (sẽ bỏ sót cấp cứu — xem Đánh giá chất lượng phần B).
+- **`needs_vet` over-trigger 8/36 câu lành tính** — đã giảm từ 10/36 bằng rerank-relevance gate. Đã điều tra fix sâu hơn ở `pipeline/classifier.py` và **kết luận không khả thi**: keyword nặng trong body vừa gây over-trigger vừa là tín hiệu bắt cấp cứu thật, mọi rule severity chặt hơn đều làm rớt recall cấp cứu tệ hơn 1:1 (xem bảng ở Đánh giá chất lượng phần B). 8/36 là cái giá chấp nhận được cho recall 9/9.
 - **Breed coverage mỏng** — community Q&A gần như không có câu hỏi giống; KB breed chủ yếu dựa champetsfamily. Cần thêm nguồn breed-specific (sitemap phải verify thật, đừng đoán URL).
 - **Reranker tăng latency** — bge-reranker-v2-m3 chấm 20 cặp/query trên CPU (~5-8s). Set `MEO_RERANK=0` để tắt (fallback e5 ordering) nếu cần nhanh; hoặc chạy GPU.
 - **Stateless** — `session_id` chỉ trả về, không lưu lịch sử. Team web phải gửi `messages[]` mỗi request hoặc tự lưu Redis.
