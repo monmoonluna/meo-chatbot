@@ -54,24 +54,28 @@ def judge_reply(question: str, chunks: list[dict], reply: str) -> dict | None:
     keys = gemini_api_keys()
     if not keys:
         return None
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     ctx = "\n\n".join(
         f"[{i+1}] (topic={c.get('topic')}, sev={c.get('severity')}) {c.get('text','')[:600]}"
         for i, c in enumerate(chunks)
     )
     prompt = f"CÂU HỎI: {question}\n\nCONTEXT:\n{ctx}\n\nCÂU TRẢ LỜI:\n{reply}"
+    config = types.GenerateContentConfig(
+        system_instruction=JUDGE_PROMPT,
+        temperature=0.0,
+        # 2.5-flash dùng "thinking tokens" ăn vào ngân sách output → 256 quá nhỏ,
+        # JSON bị cắt (finish_reason=MAX_TOKENS). Để 1024.
+        max_output_tokens=1024,
+        response_mime_type="application/json",
+    )
     for key in keys:
-        genai.configure(api_key=key)
+        client = genai.Client(api_key=key)
         for model_name in DEFAULT_MODELS:
             try:
-                model = genai.GenerativeModel(
-                    model_name, system_instruction=JUDGE_PROMPT,
-                    # 2.5-flash dùng "thinking tokens" ăn vào ngân sách output →
-                    # 256 quá nhỏ, JSON bị cắt (finish_reason=MAX_TOKENS). Để 1024.
-                    generation_config={"temperature": 0.0, "max_output_tokens": 1024,
-                                       "response_mime_type": "application/json"},
-                )
-                raw = model.generate_content(prompt).text
+                raw = client.models.generate_content(
+                    model=model_name, contents=prompt, config=config,
+                ).text
                 d = _parse_judge_json(raw)
                 if d is None:
                     continue  # JSON hỏng/cắt → thử model/key kế tiếp
@@ -200,7 +204,12 @@ def main() -> None:
         chunks = retrieve(q["vi"], k=5)
         reply = None
         if gen:
-            reply = gen([{"role": "user", "content": q["vi"]}], chunks, user_level="auto")
+            from app.llm import LLMUnavailable
+            try:
+                reply = gen([{"role": "user", "content": q["vi"]}], chunks, user_level="auto")
+            except LLMUnavailable as e:
+                reply = None
+                print(f"[LLM_UNAVAILABLE:{e.detail}]", end=" ", flush=True)
             # Mirror app/main.py: server-side vet banner khi needs_vet (đo đúng
             # hành vi ship, không phụ thuộc LLM tự chèn ⚠).
             from app.main import _VET_BANNER, _compute_needs_vet

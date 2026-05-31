@@ -14,16 +14,18 @@ Test bằng curl:
 from __future__ import annotations
 
 import os
+import re
+import threading
 import time
 import uuid
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from .llm import generate_reply
+from .llm import LLMUnavailable, generate_reply
 from .retriever import retrieve, warmup
 from .schemas import ChatRequest, ChatResponse, Citation
 
@@ -80,6 +82,48 @@ _VET_BANNER = (
     "khám trực tiếp.** Thông tin dưới đây chỉ mang tính tham khảo, không thay thế "
     "chẩn đoán của thú y.\n\n"
 )
+
+
+# --- Response cache (giảm tải quota Gemini cho câu hỏi lặp) ---
+# Chỉ cache request đơn lượt (1 message) + topic auto → câu hỏi phổ biến không
+# tốn quota LLM lần 2. Bounded LRU theo MEO_REPLY_CACHE (mặc định 256, 0 = tắt).
+REPLY_CACHE_MAX = int(os.getenv("MEO_REPLY_CACHE", "256"))
+_reply_cache: "OrderedDict[tuple, dict]" = OrderedDict()
+_cache_lock = threading.Lock()
+
+
+def _normalize_q(text: str) -> str:
+    """Chuẩn hoá câu hỏi cho cache key: lowercase + gộp khoảng trắng."""
+    return re.sub(r"\s+", " ", text.strip().lower())
+
+
+def _cache_key(req: ChatRequest):
+    """Khoá cache cho request đơn lượt, topic auto. None → không cache."""
+    if REPLY_CACHE_MAX <= 0:
+        return None
+    if len(req.messages) != 1 or req.topic_filter != "auto":
+        return None
+    return (req.user_level, req.top_k, _normalize_q(req.messages[-1].content))
+
+
+def _cache_get(key) -> dict | None:
+    if key is None:
+        return None
+    with _cache_lock:
+        hit = _reply_cache.get(key)
+        if hit is not None:
+            _reply_cache.move_to_end(key)  # LRU: vừa dùng → đẩy về cuối
+        return hit
+
+
+def _cache_put(key, payload: dict) -> None:
+    if key is None:
+        return
+    with _cache_lock:
+        _reply_cache[key] = payload
+        _reply_cache.move_to_end(key)
+        while len(_reply_cache) > REPLY_CACHE_MAX:
+            _reply_cache.popitem(last=False)  # evict oldest
 
 
 def _compute_needs_vet(chunks: list[dict]) -> bool:
@@ -143,9 +187,21 @@ def chat(req: ChatRequest) -> ChatResponse:
 
     last_user = req.messages[-1].content
     topic = req.topic_filter if req.topic_filter != "auto" else None
+    session_id = req.session_id or str(uuid.uuid4())
+
+    # Cache hit (chỉ câu đơn lượt + topic auto) → trả ngay, bỏ qua retrieval + LLM.
+    ck = _cache_key(req)
+    cached = _cache_get(ck)
+    if cached is not None:
+        return ChatResponse(
+            reply=cached["reply"],
+            citations=[Citation(**c) for c in cached["citations"]],
+            topic_detected=cached["topic_detected"],
+            needs_vet=cached["needs_vet"],
+            session_id=session_id,
+        )
 
     chunks = retrieve(last_user, k=req.top_k, topic_filter=topic)
-    session_id = req.session_id or str(uuid.uuid4())
 
     if not chunks:
         return ChatResponse(
@@ -169,11 +225,21 @@ def chat(req: ChatRequest) -> ChatResponse:
         topic_counts[t] = topic_counts.get(t, 0) + 1
     topic_detected = max(topic_counts, key=topic_counts.get) if topic_counts else None
 
-    reply = generate_reply(
-        [m.model_dump() for m in req.messages],
-        chunks,
-        user_level=req.user_level,
-    )
+    try:
+        reply = generate_reply(
+            [m.model_dump() for m in req.messages],
+            chunks,
+            user_level=req.user_level,
+        )
+    except LLMUnavailable as e:
+        # Hết quota mọi key / thiếu key / lỗi mạng → 503 thân thiện, không lộ
+        # chuỗi lỗi kỹ thuật cho người dùng cuối. Chi tiết log ở server.
+        print(f"[chat] LLM unavailable: {e.detail}")
+        raise HTTPException(
+            status_code=503,
+            detail="Hệ thống đang tạm thời quá tải, bạn vui lòng thử lại sau ít phút nhé.",
+            headers={"Retry-After": "30"},
+        )
 
     # Server-side: ép banner cảnh báo thú y khi needs_vet (không phụ thuộc LLM
     # tự chèn — eval cho thấy LLM bỏ sót). Tránh nhân đôi nếu reply đã mở bằng ⚠.
@@ -191,6 +257,13 @@ def chat(req: ChatRequest) -> ChatResponse:
         )
         for i, c in enumerate(chunks)
     ]
+
+    _cache_put(ck, {
+        "reply": reply,
+        "citations": [c.model_dump() for c in citations],
+        "topic_detected": topic_detected,
+        "needs_vet": needs_vet,
+    })
 
     return ChatResponse(
         reply=reply,

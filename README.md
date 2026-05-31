@@ -385,7 +385,7 @@ Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill +
 - **Reranker tăng latency** — bge-reranker-v2-m3 chấm 20 cặp/query trên CPU (~5-8s). Set `MEO_RERANK=0` để tắt (fallback e5 ordering) nếu cần nhanh; hoặc chạy GPU.
 - **Stateless** — `session_id` chỉ trả về, không lưu lịch sử. Team web phải gửi `messages[]` mỗi request hoặc tự lưu Redis.
 - **Single-instance** — ChromaDB local, không scale horizontal. Để production cần switch lên Qdrant Cloud hoặc tương tự.
-- **`google-generativeai` deprecated** — chưa migrate sang `google-genai` (warning, không fail).
+- **SDK Gemini** — đã migrate sang `google-genai` (SDK mới); `google-generativeai` cũ (deprecated) đã gỡ khỏi dependencies.
 - **OS silent-killer trên Windows** — pipeline đã có workaround (Task Scheduler) nhưng nguyên nhân chưa rõ (có thể Defender / scheduled tasks). Linux deploy sẽ không gặp.
 - **`sentence_transformers` không tin cậy trên 1 số máy Windows** — retriever đã bypass dùng `transformers` trực tiếp. Ingest vẫn dùng `sentence_transformers`; nếu fail trên máy bạn, có thể sửa `pipeline/ingest.py` theo cùng pattern hoặc download data sẵn từ HF (không cần re-ingest).
 

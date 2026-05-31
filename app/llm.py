@@ -22,12 +22,21 @@ from __future__ import annotations
 import os
 import re
 import threading
-import warnings
 
 from .prompts import SYSTEM_PROMPT, build_user_prompt
 
-# Suppress deprecation warning từ google-generativeai (chưa migrate sang google-genai)
-warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
+
+class LLMUnavailable(Exception):
+    """LLM tạm thời không trả lời được (hết quota mọi key / lỗi mạng / thiếu key).
+
+    main.py bắt exception này và trả HTTP 503 + thông điệp thân thiện, thay vì
+    đẩy chuỗi lỗi kỹ thuật ('Hết quota...') ra cho người dùng cuối.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(detail)
+        self.detail = detail
+
 
 DEFAULT_MODELS = [
     "gemini-2.5-flash",
@@ -99,52 +108,50 @@ def generate_reply(
     chunks: list[dict],
     user_level: str = "auto",
 ) -> str:
+    """Sinh câu trả lời từ Gemini (SDK google-genai mới).
+
+    Trả về string khi thành công (kể cả khi bộ lọc an toàn chặn → trả thông điệp
+    lịch sự). RAISE `LLMUnavailable` khi thiếu key hoặc đã thử hết mọi key × model
+    mà vẫn lỗi (quota/network) — để main.py trả 503 + UX thân thiện.
+    """
     keys = _ordered_keys()
     if not keys:
-        return (
-            "[Server thiếu GEMINI_API_KEY — chưa thể gọi LLM]\n\n"
-            f"Đã retrieve {len(chunks)} chunk liên quan:\n" +
-            "\n".join(f"  [{i+1}] {c.get('section_title') or c.get('article_title')}"
-                      for i, c in enumerate(chunks))
-        )
+        raise LLMUnavailable("no_api_keys")
 
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
 
     prompt = build_user_prompt(messages, chunks, user_level=user_level)
-    config = {"temperature": 0.3, "max_output_tokens": 1024}
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        temperature=0.3,
+        max_output_tokens=1024,
+    )
     models = _get_models_to_try()
 
     last_error = None
     for key in keys:
-        genai.configure(api_key=key)
-        key_exhausted = False
+        client = genai.Client(api_key=key)
         for model_name in models:
             try:
-                model = genai.GenerativeModel(
-                    model_name,
-                    system_instruction=SYSTEM_PROMPT,
-                    generation_config=config,
+                response = client.models.generate_content(
+                    model=model_name, contents=prompt, config=config,
                 )
-                response = model.generate_content(prompt)
-                try:
-                    return response.text
-                except Exception:
+                text = response.text
+                if not text:  # bộ lọc an toàn chặn / output rỗng
                     return ("Mình không thể trả lời câu hỏi này (bộ lọc an toàn của LLM "
                             "đã chặn). Vui lòng diễn đạt lại hoặc liên hệ thú y trực tiếp.")
+                return text
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
-                if any(m in err_str for m in _QUOTA_MARKERS):
-                    continue  # model kế tiếp; hết model → key kế tiếp
                 if any(m in err_str for m in _AUTH_MARKERS):
-                    key_exhausted = True  # key hỏng/sai → bỏ qua, thử key kế tiếp
-                    break
-                # Lỗi khác (network, server) → return luôn
-                return f"[LLM error] {type(e).__name__}: {str(e)[:200]}"
-        _ = key_exhausted  # (chỉ để rõ ý: rơi xuống đây nghĩa là thử key kế tiếp)
+                    break  # key hỏng/sai → bỏ qua, thử key kế tiếp
+                # quota (429/ResourceExhausted) hoặc network/server → thử model
+                # kế, hết model → key kế. Không trả lỗi thô cho user nữa.
+                continue
 
-    return (
-        f"[Hết quota free tier cho TẤT CẢ {len(keys)} key × {len(models)} model Gemini. "
-        f"Đợi quota reset (nửa đêm giờ Pacific) hoặc thêm key vào GEMINI_API_KEYS. "
-        f"Lỗi cuối: {type(last_error).__name__}]"
-    )
+    # Đã thử hết keys × models mà vẫn lỗi → báo cho main.py xử lý UX.
+    print(f"[LLM] kiệt quệ: {len(keys)} key × {len(models)} model đều lỗi. "
+          f"Lỗi cuối: {type(last_error).__name__}: {str(last_error)[:200]}")
+    raise LLMUnavailable("all_exhausted")
