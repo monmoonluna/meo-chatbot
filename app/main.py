@@ -75,6 +75,39 @@ _request_log: dict[str, deque[float]] = defaultdict(deque)
 # "any high" để an toàn tuyệt đối. Đặt 0 để tắt gate (về hành vi cũ).
 NEEDS_VET_MIN_RR = float(os.getenv("MEO_NEEDS_VET_MIN_RR", "0.5"))
 
+# Cổng INTENT cấp 2: chunk severity=high thường rất "liên quan" về mặt ngữ nghĩa
+# với cả câu hỏi lành tính (đặt lồng vận chuyển, lịch tiêm phòng, hắt hơi...) →
+# reranker cho điểm 0.98+, vượt cả sàn cấp cứu 0.937, nên ngưỡng rr KHÔNG tách
+# được. Dry-run eval_external_set.json: yêu cầu thêm câu hỏi có NGÔN NGỮ cấp tính
+# giữ 9/9 recall mà giảm over-trigger 8→1. Đặt MEO_NEEDS_VET_REQUIRE_INTENT=0 để
+# trở về hành vi cũ (chỉ cổng rr). RỦI RO: list từ khoá → câu cấp cứu diễn đạt
+# không có từ khoá nào có thể bị bỏ sót; list dưới đây cố tình rộng.
+NEEDS_VET_REQUIRE_INTENT = os.getenv("MEO_NEEDS_VET_REQUIRE_INTENT", "1").strip().lower() not in (
+    "0", "false", "no", "off", ""
+)
+
+# Dấu hiệu cấp tính ở CÂU HỎI (red-flag thú y). Cố tình rộng — thiên về recall.
+_ACUTE_INTENT = (
+    "khó thở", "há miệng", "thở gấp", "thở khò", "tím tái", "thở dốc",
+    "co giật", "động kinh", "co cứng", "ngất", "bất tỉnh", "hôn mê", "lả đi",
+    "nằm im", "không động đậy", "đột ngột", "đột nhiên",
+    "ngộ độc", "ăn phải", "nuốt phải", "nuốt", "hóc", "mắc nghẹn",
+    "không đi tiểu", "bí tiểu", "tiểu không", "không tiểu được", "rặn tiểu",
+    "nôn liên tục", "nôn nhiều", "nôn ra máu", "nôn mãi", "ói liên tục", "ói nhiều",
+    "tiêu chảy nặng", "phân có máu", "có máu", "ra máu", "chảy máu", "máu",
+    "sốt cao", "sốt 4", "sốt 39", "sốt 40", "sốt 41",
+    "bỏ ăn", "không ăn", "không chịu ăn", "chán ăn",
+    "cấp cứu", "nguy hiểm", "nguy kịch", "khẩn cấp",
+    "tai nạn", "ngã", "té", "chấn thương", "gãy", "va đập",
+    "liệt", "sưng to", "đau dữ dội", "đau quằn", "rên", "kêu đau", "co rúm",
+)
+
+
+def _has_acute_intent(text: str) -> bool:
+    """True nếu câu hỏi chứa dấu hiệu cấp tính (chỉ dùng khi REQUIRE_INTENT bật)."""
+    n = (text or "").lower()
+    return any(kw in n for kw in _ACUTE_INTENT)
+
 # Banner cảnh báo thú y, server-side prepend khi needs_vet=True. Trước đây phụ
 # thuộc LLM tự chèn → eval cho thấy LLM bỏ sót 9/9 → ép server-side để chắc chắn.
 _VET_BANNER = (
@@ -126,21 +159,34 @@ def _cache_put(key, payload: dict) -> None:
             _reply_cache.popitem(last=False)  # evict oldest
 
 
-def _compute_needs_vet(chunks: list[dict]) -> bool:
-    """True nếu có chunk severity=='high' VÀ đủ liên quan (rerank_score >= ngưỡng).
+def _compute_needs_vet(chunks: list[dict], query: str = "") -> bool:
+    """True nếu có chunk severity=='high' đủ liên quan (rerank_score >= ngưỡng)
+    VÀ (tuỳ chọn) câu hỏi có ngôn ngữ cấp tính.
 
     Khi rerank_score thiếu (None) hoặc reranker tắt (0 cho mọi chunk high) →
     fallback về "any high" để giữ an toàn (recall ưu tiên hơn precision).
+    Cổng intent (NEEDS_VET_REQUIRE_INTENT) áp dụng SAU cổng rr: chỉ bật banner khi
+    chính câu hỏi mô tả tình huống cấp tính → loại cry-wolf trên câu lành tính mà
+    vẫn giữ 9/9 recall cấp cứu (xem _ACUTE_INTENT).
     """
     high = [c for c in chunks if c.get("severity") == "high"]
     if not high:
         return False
+
     if NEEDS_VET_MIN_RR <= 0:
-        return True
-    rrs = [c.get("rerank_score") for c in high]
-    if all(rr is None or rr == 0 for rr in rrs):
-        return True  # reranker off/failed → đừng tắt cảnh báo
-    return any(rr is not None and rr >= NEEDS_VET_MIN_RR for rr in rrs)
+        rr_pass = True
+    else:
+        rrs = [c.get("rerank_score") for c in high]
+        if all(rr is None or rr == 0 for rr in rrs):
+            rr_pass = True  # reranker off/failed → đừng tắt cảnh báo
+        else:
+            rr_pass = any(rr is not None and rr >= NEEDS_VET_MIN_RR for rr in rrs)
+    if not rr_pass:
+        return False
+
+    if NEEDS_VET_REQUIRE_INTENT and not _has_acute_intent(query):
+        return False  # chunk nghiêm trọng nhưng câu hỏi không cấp tính → không cry-wolf
+    return True
 
 
 def _client_ip(request: Request) -> str:
@@ -214,10 +260,11 @@ def chat(req: ChatRequest) -> ChatResponse:
         )
 
     # needs_vet: chunk severity=="high" CHỈ kích hoạt khi đủ liên quan
-    # (rerank_score >= NEEDS_VET_MIN_RR). Dry-run trên eval_external_set.json giữ
-    # 9/9 recall cấp cứu (sàn rr của chunk-high = 0.937) đồng thời loại flag sai
-    # rõ ràng (Maine Coon gầy rr=0.11, mèo gạt đồ rr=0.25). Xem _compute_needs_vet.
-    needs_vet = _compute_needs_vet(chunks)
+    # (rerank_score >= NEEDS_VET_MIN_RR) VÀ câu hỏi có ngôn ngữ cấp tính
+    # (NEEDS_VET_REQUIRE_INTENT). Dry-run trên eval_external_set.json giữ 9/9 recall
+    # cấp cứu đồng thời giảm over-trigger 8→1 (loại cry-wolf: đặt lồng, tiêm phòng,
+    # hắt hơi, mắt đỏ... có chunk-high rr 0.98+ nhưng câu hỏi không cấp tính).
+    needs_vet = _compute_needs_vet(chunks, last_user)
 
     topic_counts: dict[str, int] = {}
     for c in chunks:

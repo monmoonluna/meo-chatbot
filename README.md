@@ -267,7 +267,7 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 | Topic match (top-5 majority) | **34/45** (76%) | sau khi thêm reranker |
 | Emergency → `needs_vet=true` | **9/9** (100%) | recall cấp cứu tuyệt đối |
 | Emergency có banner ⚠️ | **9/9** (100%) | banner server-side, không phụ thuộc LLM |
-| Over-trigger (câu lành tính) | **8/36** (22%) | sau khi thêm rerank-relevance gate (was 10/36) |
+| Over-trigger (câu lành tính) | **1/36** (3%) | rerank-gate (11→8) + intent-gate (8→1), recall vẫn 9/9 |
 | Grounded (không bỏ cuộc) | **42/45** (93%) | |
 | Có citation `[n]` | **37/45** (82%) | |
 | **Faithfulness** (LLM-judge 1-5) | **4.86** | mọi khẳng định có context chống lưng |
@@ -282,7 +282,7 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 |---|---|
 | Citations `[n]` rớt ~42% (18/31) | Prompt bắt buộc + ví dụ mẫu (`app/prompts.py`) |
 | e5 cosine bị nén → topic precision thấp, give-up | **Cross-encoder rerank** top-20→top-5 (`app/retriever.py`) |
-| `needs_vet` over-trigger ~1/3 câu lành tính | Rerank-relevance gate (xem dưới) → còn 8/36 |
+| `needs_vet` over-trigger ~1/3 câu lành tính | Rerank-gate + intent-gate (xem dưới) → còn 1/36 |
 
 **`needs_vet` — rerank-relevance gate** (an toàn > precision): chunk `severity=high`
 chỉ bật cảnh báo khi nó đủ **liên quan** (`rerank_score >= 0.5`); nếu reranker
@@ -290,8 +290,9 @@ tắt/hỏng thì fallback về "any high" để không bao giờ tắt cảnh b
 
 | Rule | Emergency recall | Over-trigger |
 |---|---|---|
-| `any high in top-5` (cũ) | **9/9** | 10/36 |
-| `high + rerank_score>=0.5` (đang dùng) | **9/9** | **8/36** |
+| `any high in top-5` (cũ) | **9/9** | 11/36 |
+| `high + rerank_score>=0.5` | **9/9** | 8/36 |
+| `high + rr>=0.5 + intent` (đang dùng) | **9/9** | **1/36** |
 | `high in top-2` | 4/6 ❌ | — |
 | `high in top-1` | 3/6 ❌ | — |
 
@@ -311,11 +312,26 @@ flag rõ ràng sai (Maine Coon gầy `rr=0.11`, mèo gạt đồ vật `rr=0.25`
 | kw phải nằm trong **title** | 4/9 ❌ | 2/36 |
 | hybrid (kw cấp tính ở body OK, tên bệnh mãn tính chỉ tính ở title) | 7/9 ❌ | 7/36 |
 
-→ **Mọi rule giảm over-trigger đều giảm recall cấp cứu, tỉ lệ tệ hơn 1:1** (hybrid
-mất 2 ca thật — viêm bàng quang tái phát, nôn liên tục — để đổi lấy 1 ca lành tính).
-Lý do: keyword-nặng-trong-body vừa gây over-trigger lành tính VỪA là tín hiệu bắt
-cấp cứu thật — **không tách được**. Rerank gate là đòn bẩy an toàn duy nhất; 8/36
-là cái giá phải trả cho recall 9/9. (Script kiểm chứng: parse `eval_external_results_v3.md`.)
+→ **Trên trục `severity` của chunk, mọi rule giảm over-trigger đều giảm recall cấp
+cứu, tỉ lệ tệ hơn 1:1** (hybrid mất 2 ca thật — viêm bàng quang tái phát, nôn liên
+tục — để đổi lấy 1 ca lành tính). Lý do: keyword-nặng-trong-body vừa gây over-trigger
+lành tính VỪA là tín hiệu bắt cấp cứu thật — **không tách được bằng severity**.
+
+**`needs_vet` — intent-gate (đòn bẩy thứ 2, trục câu hỏi).** Phân tích rerank cho thấy
+7/8 câu lành tính over-trigger lại có chunk-high **rất liên quan** (`rr` 0.98–0.999,
+vượt cả sàn cấp cứu 0.937) → ngưỡng `rr` đã cạn (chỉ hạ được 11→8). Mấu chốt:
+`severity` là thuộc tính của **chunk**, không phải mức cấp tính của **câu hỏi**. "Đặt
+lồng vận chuyển ở đâu" kéo về chunk-high liên quan nhưng bản thân câu hỏi không cấp
+tính. Nên thêm cổng cấp 2: chỉ bật banner khi **câu hỏi** chứa ngôn ngữ cấp tính
+(`khó thở`, `nôn liên tục`, `máu`, `không đi tiểu`, `ngộ độc`... — list ~60 red-flag,
+cố tình rộng). Dry-run `eval_external_set.json`: **over-trigger 8→1, recall giữ 9/9**
+(ca còn lại "mèo bỏ ăn đợi bao lâu" — `bỏ ăn >24h` là red-flag thật, chấp nhận được).
+
+Bật/tắt bằng `MEO_NEEDS_VET_REQUIRE_INTENT` (mặc định 1; đặt 0 → về cổng chỉ-rr).
+**Rủi ro & cách kiểm soát:** intent dựa trên keyword nên câu cấp cứu diễn đạt không
+có từ khoá nào có thể bị bỏ sót — vì vậy list giữ rộng và `scripts/tune_needs_vet.py`
+có `assert recall == 9/9` làm regression-guard. (Script kiểm chứng cổng production:
+`scripts/tune_needs_vet.py`, retrieval-only, không tốn quota.)
 
 Khi `needs_vet=true`, server **tự prepend banner ⚠️** (không phụ thuộc LLM tự chèn —
 eval cho thấy LLM bỏ sót 9/9). Logic: `app/main.py:_compute_needs_vet`.
