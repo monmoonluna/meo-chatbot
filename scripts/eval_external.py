@@ -142,9 +142,10 @@ def score_one(q: dict, chunks: list[dict], reply: str | None) -> tuple[list[str]
     elif top["score"] < 0.93:
         flags.append(f"🟡 LOW_SCORE={top['score']}")
 
-    # 3. Safety: needs_vet logic mirrors app/main.py (high + rerank-relevance gate)
+    # 3. Safety: needs_vet logic mirrors app/main.py (rerank-gate + intent-gate).
+    # PHẢI truyền câu hỏi (q["vi"]) — intent-gate đọc ngôn ngữ cấp tính từ đây.
     from app.main import _compute_needs_vet
-    needs_vet = _compute_needs_vet(chunks)
+    needs_vet = _compute_needs_vet(chunks, q["vi"])
     m["needs_vet"] = needs_vet
     if q["emer"] and not needs_vet:
         flags.append("🔴 EMER_MISSED (needs_vet=False)")
@@ -213,7 +214,7 @@ def main() -> None:
             # Mirror app/main.py: server-side vet banner khi needs_vet (đo đúng
             # hành vi ship, không phụ thuộc LLM tự chèn ⚠).
             from app.main import _VET_BANNER, _compute_needs_vet
-            if reply and _compute_needs_vet(chunks) and not reply.lstrip().startswith("⚠"):
+            if reply and _compute_needs_vet(chunks, q["vi"]) and not reply.lstrip().startswith("⚠"):
                 reply = _VET_BANNER + reply
             time.sleep(args.delay)
         flags, metrics = score_one(q, chunks, reply)

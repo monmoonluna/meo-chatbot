@@ -183,7 +183,7 @@ def _cache_put(key, payload: dict) -> None:
             _reply_cache.popitem(last=False)  # evict oldest
 
 
-def _compute_needs_vet(chunks: list[dict], query: str = "") -> bool:
+def _compute_needs_vet(chunks: list[dict], query: str) -> bool:
     """True nếu có chunk severity=='high' đủ liên quan (rerank_score >= ngưỡng)
     VÀ (tuỳ chọn) câu hỏi có ngôn ngữ cấp tính.
 
