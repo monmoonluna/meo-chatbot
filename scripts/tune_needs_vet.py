@@ -57,3 +57,40 @@ if over:
     for v in over:
         print("   -", v[:60])
 assert emer_hit == emer_total, f"RECALL REGRESSION: {emer_hit}/{emer_total}"
+
+# --- Stress set: recall trên ca cấp cứu diễn đạt khẩu ngữ/gián tiếp ---
+# Tách intent-gate khỏi độ phủ KB: chỉ tính ca CÓ chunk-high liên quan
+# (rr>=MIN_RR). Mọi ca như vậy PHẢI bật banner → guard cho intent-gate.
+# Ca KHÔNG có chunk-high = lỗ hổng nội dung KB (crawl tương lai), không phải lỗi gate.
+stress_path = Path(__file__).parent / "emergency_stress_set.json"
+if stress_path.exists():
+    stress = json.loads(stress_path.read_text(encoding="utf-8"))["questions"]
+    have_high = fire = no_high = 0
+    intent_misses = []
+    kb_gaps = []
+    for q in stress:
+        ch = retrieve(q["vi"], k=5)
+        rr_high = [c.get("rerank_score") or 0.0 for c in ch if c.get("severity") == "high"]
+        has_high = any(r >= NEEDS_VET_MIN_RR for r in rr_high)
+        nv = _compute_needs_vet(ch, q["vi"])
+        if has_high:
+            have_high += 1
+            if nv:
+                fire += 1
+            else:
+                intent_misses.append(q["vi"][:60])
+        else:
+            no_high += 1
+            kb_gaps.append(q["vi"][:60])
+    print(f"\n=== STRESS SET (emergency_stress_set.json, n={len(stress)}) ===")
+    print(f"INTENT RECALL: {fire}/{have_high}   (ca có chunk-high; PHẢI = {have_high}/{have_high})")
+    print(f"KB-coverage gap (không có chunk-high, intent không cứu được): {no_high}")
+    if intent_misses:
+        print("⚠️  INTENT-GATE BỎ SÓT (REGRESSION — thêm từ khoá vào _ACUTE_INTENT!):")
+        for v in intent_misses:
+            print("   -", v)
+    if kb_gaps:
+        print("KB gaps (mục tiêu crawl tương lai, KHÔNG phải lỗi gate):")
+        for v in kb_gaps:
+            print("   -", v)
+    assert fire == have_high, f"INTENT-GATE REGRESSION: {fire}/{have_high}"

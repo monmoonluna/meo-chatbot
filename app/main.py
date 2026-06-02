@@ -86,20 +86,44 @@ NEEDS_VET_REQUIRE_INTENT = os.getenv("MEO_NEEDS_VET_REQUIRE_INTENT", "1").strip(
     "0", "false", "no", "off", ""
 )
 
-# Dấu hiệu cấp tính ở CÂU HỎI (red-flag thú y). Cố tình rộng — thiên về recall.
+# Dấu hiệu cấp tính ở CÂU HỎI (red-flag thú y). Cố tình RỘNG — thiên về recall.
+# Mở rộng sau stress-test emergency_stress_set.json (cách diễn đạt khẩu ngữ/gián
+# tiếp làm lọt 11/20 ca thật ở list hẹp ban đầu). Mỗi nhóm gom nhiều biến thể.
 _ACUTE_INTENT = (
-    "khó thở", "há miệng", "thở gấp", "thở khò", "tím tái", "thở dốc",
-    "co giật", "động kinh", "co cứng", "ngất", "bất tỉnh", "hôn mê", "lả đi",
-    "nằm im", "không động đậy", "đột ngột", "đột nhiên",
-    "ngộ độc", "ăn phải", "nuốt phải", "nuốt", "hóc", "mắc nghẹn",
+    # hô hấp / tuần hoàn
+    "khó thở", "thở khó", "há miệng", "há hốc", "thở gấp", "thở dốc", "thở khò",
+    "thở hổn hển", "hổn hển", "thở nhanh", "thở dồn", "phập phồng",
+    "tím tái", "lưỡi tái", "tái nhợt", "lưỡi tím", "tím lại",
+    # thần kinh / suy sụp
+    "co giật", "động kinh", "co cứng", "co rúm", "giật giật", "lẩy bẩy", "run rẩy",
+    "sùi bọt", "trợn", "ngất", "bất tỉnh", "hôn mê", "lả đi", "mệt lả", "lờ đờ",
+    "mềm nhũn", "nằm im", "không động đậy", "không phản ứng", "gọi không",
+    "đột ngột", "đột nhiên",
+    # ngộ độc / ăn nuốt dị vật
+    "ngộ độc", "trúng độc", "ăn phải", "ăn nhầm", "liếm phải", "gặm phải",
+    "uống phải", "nuốt phải", "nuốt", "hóc", "mắc nghẹn", "chảy nước dãi",
+    "bả chuột", "thuốc diệt", "thuốc tẩy", "bách hợp", "hoa loa kèn",
+    # tiết niệu (tắc nghẽn = cấp cứu)
     "không đi tiểu", "bí tiểu", "tiểu không", "không tiểu được", "rặn tiểu",
+    "rặn mãi", "không thấy nước tiểu", "không ra nước tiểu",
+    # tiêu hoá
     "nôn liên tục", "nôn nhiều", "nôn ra máu", "nôn mãi", "ói liên tục", "ói nhiều",
-    "tiêu chảy nặng", "phân có máu", "có máu", "ra máu", "chảy máu", "máu",
+    "ọe", "tiêu chảy nặng", "phân có máu", "có máu", "ra máu", "chảy máu", "máu",
+    # sốt
     "sốt cao", "sốt 4", "sốt 39", "sốt 40", "sốt 41",
-    "bỏ ăn", "không ăn", "không chịu ăn", "chán ăn",
+    # bỏ ăn
+    "bỏ ăn", "không ăn", "không chịu ăn", "không đụng", "bỏ bữa", "chán ăn",
+    # sơ sinh / sinh sản
+    "không chịu bú", "lạnh toát", "lạnh ngắt", "rặn đẻ", "đẻ khó",
+    # rõ ràng khẩn cấp
     "cấp cứu", "nguy hiểm", "nguy kịch", "khẩn cấp",
-    "tai nạn", "ngã", "té", "chấn thương", "gãy", "va đập",
-    "liệt", "sưng to", "đau dữ dội", "đau quằn", "rên", "kêu đau", "co rúm",
+    # chấn thương / cơ học
+    "tai nạn", "ngã", "té", "rơi từ", "rơi xuống", "kéo lê", "chấn thương",
+    "gãy", "va đập",
+    # đau / sưng / mắt
+    "liệt", "sưng to", "sưng vù", "mắt lồi", "lồi ra", "lồi hẳn", "lồi",
+    "đau dữ dội", "đau quằn",
+    "đau đớn", "rên", "kêu đau", "kêu gào",
 )
 
 

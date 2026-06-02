@@ -323,15 +323,27 @@ vượt cả sàn cấp cứu 0.937) → ngưỡng `rr` đã cạn (chỉ hạ �
 `severity` là thuộc tính của **chunk**, không phải mức cấp tính của **câu hỏi**. "Đặt
 lồng vận chuyển ở đâu" kéo về chunk-high liên quan nhưng bản thân câu hỏi không cấp
 tính. Nên thêm cổng cấp 2: chỉ bật banner khi **câu hỏi** chứa ngôn ngữ cấp tính
-(`khó thở`, `nôn liên tục`, `máu`, `không đi tiểu`, `ngộ độc`... — list ~60 red-flag,
-cố tình rộng). Dry-run `eval_external_set.json`: **over-trigger 8→1, recall giữ 9/9**
+(`khó thở`, `nôn liên tục`, `máu`, `không đi tiểu`, `ngộ độc`... — list red-flag
+cố tình rộng, xem stress-test bên dưới). Dry-run `eval_external_set.json`:
+**over-trigger 8→1, recall giữ 9/9**
 (ca còn lại "mèo bỏ ăn đợi bao lâu" — `bỏ ăn >24h` là red-flag thật, chấp nhận được).
 
 Bật/tắt bằng `MEO_NEEDS_VET_REQUIRE_INTENT` (mặc định 1; đặt 0 → về cổng chỉ-rr).
-**Rủi ro & cách kiểm soát:** intent dựa trên keyword nên câu cấp cứu diễn đạt không
-có từ khoá nào có thể bị bỏ sót — vì vậy list giữ rộng và `scripts/tune_needs_vet.py`
-có `assert recall == 9/9` làm regression-guard. (Script kiểm chứng cổng production:
-`scripts/tune_needs_vet.py`, retrieval-only, không tốn quota.)
+
+**Rủi ro keyword → stress-test để vá.** Intent dựa trên keyword nên câu cấp cứu diễn
+đạt khẩu ngữ/gián tiếp có thể lọt. Đã soạn `scripts/emergency_stress_set.json` (20 ca
+cấp cứu thật phrasing đời thường: `liếm phải thuốc tẩy`, `sùi bọt mép`, `thở khó`,
+`rặn mãi mà không thấy nước tiểu`, `rơi từ tầng 3`, `ăn nhầm bả chuột`, `gặm phải lá
+bách hợp`, `mắt lồi`...). List hẹp ban đầu **lọt 11/20** → mở rộng `_ACUTE_INTENT`
+(~120 biến thể, gom theo nhóm hô hấp/thần kinh/ngộ độc/tiết niệu/...) → **intent
+recall 17/17** (ca có chunk-high liên quan), mà over-trigger trên set gốc **vẫn 1/36**.
+Còn **3 ca KB-coverage gap** (đẻ khó, mèo sơ sinh hạ thân nhiệt, ọe dịch vàng) —
+retrieve KHÔNG ra chunk severity=high nào → intent không cứu được, đây là **lỗ hổng
+nội dung KB** (mục tiêu crawl tương lai), không phải lỗi gate.
+
+**Regression-guard:** `scripts/tune_needs_vet.py` (retrieval-only, không tốn quota)
+`assert` cả hai: recall 9/9 trên set gốc VÀ intent-recall đầy đủ trên stress set —
+chạy lại sau mỗi lần sửa `_ACUTE_INTENT`.
 
 Khi `needs_vet=true`, server **tự prepend banner ⚠️** (không phụ thuộc LLM tự chèn —
 eval cho thấy LLM bỏ sót 9/9). Logic: `app/main.py:_compute_needs_vet`.

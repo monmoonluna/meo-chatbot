@@ -1,0 +1,28 @@
+{
+  "_meta": {
+    "purpose": "Stress-test the needs_vet intent-gate recall on REAL feline emergencies phrased colloquially/indirectly (vocabulary that may evade the acute-intent keyword list). All entries are genuine emergencies (emer=true). Used by scripts/tune_needs_vet.py as a recall regression guard. Retrieval-only — no Gemini quota.",
+    "source": "Hand-authored from common veterinary emergency presentations (poisoning, seizure, dyspnea, urethral obstruction, trauma, heatstroke, bloat, proptosis, envenomation, dystocia, neonatal, hypoglycemia, hematochezia, choking, foreign body, lily toxicity, aortic thromboembolism)."
+  },
+  "questions": [
+    {"topic": "health", "emer": true, "en": "My cat licked some bleach and is now drooling nonstop", "vi": "Mèo nhà mình vừa liếm phải thuốc tẩy, giờ chảy nước dãi liên tục, có sao không?"},
+    {"topic": "health", "emer": true, "en": "My cat suddenly trembled all over, foaming at the mouth, eyes rolled back", "vi": "Mèo của em run lẩy bẩy, sùi bọt mép, mắt trợn ngược rồi lăn ra, phải làm gì?"},
+    {"topic": "health", "emer": true, "en": "My cat's belly is heaving fast, gasping, tongue pale", "vi": "Bụng mèo phập phồng rất nhanh, há hốc mồm ra để thở, lưỡi tái đi, tôi nên làm gì?"},
+    {"topic": "health", "emer": true, "en": "Male cat keeps straining in the litter box but no urine comes out", "vi": "Mèo đực cứ vào khay cát ngồi rặn mãi mà không thấy nước tiểu ra, có nguy không?"},
+    {"topic": "health", "emer": true, "en": "My cat fell from the 3rd floor and is now dragging both hind legs", "vi": "Mèo rơi từ tầng 3 xuống, giờ kéo lê hai chân sau không đứng dậy được, tôi phải làm sao?"},
+    {"topic": "health", "emer": true, "en": "Cat was left in a hot car, now panting and lethargic", "vi": "Mèo bị bỏ quên trong xe hơi nắng nóng cả tiếng, giờ thở hổn hển, lờ đờ mệt lả, làm gì bây giờ?"},
+    {"topic": "health", "emer": true, "en": "My cat's belly is hard and distended, screams in pain when touched", "vi": "Bụng mèo trương cứng lên, chạm vào là nó kêu gào đau đớn, có phải cấp cứu không?"},
+    {"topic": "health", "emer": true, "en": "My cat's eye is bulging out after a fight", "vi": "Mắt mèo bị lồi hẳn ra ngoài sau khi đánh nhau với mèo khác, tôi nên xử lý thế nào?"},
+    {"topic": "health", "emer": true, "en": "My cat's face swelled up after being bitten by something in the garden", "vi": "Mặt mèo sưng vù lên sau khi bị con gì cắn ngoài vườn, giờ nó thở khó, phải làm gì?"},
+    {"topic": "health", "emer": true, "en": "My mother cat has been straining to give birth for hours with no kitten", "vi": "Mèo mẹ rặn đẻ mấy tiếng đồng hồ rồi mà chưa ra con nào, có sao không?"},
+    {"topic": "health", "emer": true, "en": "Newborn kitten won't nurse and feels cold to the touch", "vi": "Mèo con mới sinh không chịu bú, sờ vào người lạnh toát, tôi phải làm gì?"},
+    {"topic": "health", "emer": true, "en": "My kitten suddenly went limp and doesn't respond when called", "vi": "Mèo con đột nhiên mềm nhũn, gọi không phản ứng gì, có nguy hiểm không?"},
+    {"topic": "health", "emer": true, "en": "My cat has been passing fresh blood in stool all day", "vi": "Mèo đi ngoài ra máu tươi liên tục cả ngày nay, tôi nên làm gì?"},
+    {"topic": "health", "emer": true, "en": "My cat keeps retching up yellow fluid all morning", "vi": "Mèo cứ ọe ra dịch vàng suốt từ sáng đến giờ, có đáng lo không?"},
+    {"topic": "health", "emer": true, "en": "My cat is choking on a fish bone, pawing at its mouth", "vi": "Mèo bị hóc xương cá, cứ cào vào cổ liên tục và khó nuốt, làm sao đây?"},
+    {"topic": "health", "emer": true, "en": "My cat ate an entire rubber band", "vi": "Mèo nuốt nguyên cả cọng dây thun vào bụng, có cần đi khám gấp không?"},
+    {"topic": "health", "emer": true, "en": "My cat chewed on a lily plant in the house", "vi": "Mèo gặm phải lá cây bách hợp (hoa loa kèn) trong nhà, có độc không?"},
+    {"topic": "health", "emer": true, "en": "My cat's hind legs suddenly went paralyzed and it's crying in pain", "vi": "Hai chân sau của mèo đột ngột bị liệt, nó kêu la đau đớn, tôi phải làm gì ngay?"},
+    {"topic": "health", "emer": true, "en": "My cat ate rat poison bait", "vi": "Mèo nhà tôi ăn nhầm bả chuột, bây giờ tôi phải làm gì?"},
+    {"topic": "health", "emer": true, "en": "My cat hasn't eaten anything for two days and just hides", "vi": "Mèo của tôi đã hai ngày nay không đụng đến thức ăn, chỉ nằm trốn một chỗ, có sao không?"}
+  ]
+}
