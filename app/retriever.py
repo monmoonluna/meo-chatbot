@@ -37,7 +37,14 @@ RERANK_ENABLED = os.getenv("MEO_RERANK", "1") != "0"
 RERANKER_MODEL = os.getenv("MEO_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 # Số candidate kéo từ ChromaDB trước khi rerank (nhiều hơn k để reranker có
 # không gian sắp xếp lại). 0.0 sigmoid floor = giữ tất cả; tune qua env.
-RERANK_CANDIDATES = int(os.getenv("MEO_RERANK_CANDIDATES", "20"))
+# 20 candidate × 512 token qua bge-reranker-v2-m3 (XLM-R-large) trên CPU = ~80s/query
+# (99% latency, xem profile). Giảm còn 10 candidate + cắt rerank ở 256 token →
+# ~20s mà vẫn giữ recall cấp cứu 9/9 (tune_needs_vet.py). Tăng lại nếu chạy GPU.
+RERANK_CANDIDATES = int(os.getenv("MEO_RERANK_CANDIDATES", "10"))
+# max_length riêng cho reranker (ngắn hơn embed 512 vì relevance nằm ở đầu đoạn).
+# 256 làm rớt 1 ca cấp cứu (máu trong phân) khỏi gate → 8/9; 384 giữ 9/9 mà vẫn
+# nhanh hơn 512 đáng kể. Đừng hạ dưới 384 nếu chưa chạy lại tune_needs_vet.py.
+RERANK_MAX_LENGTH = int(os.getenv("MEO_RERANK_MAX_LENGTH", "384"))
 # Floor trên rerank score (sigmoid 0-1). Chunk dưới ngưỡng bị loại → khi tất cả
 # rớt, app/main.py trả fallback "không đủ thông tin" thay vì bịa.
 RERANK_MIN_SCORE = float(os.getenv("MEO_RERANK_MIN_SCORE", "0.05"))
@@ -116,7 +123,7 @@ def _rerank(query: str, chunks: list[dict]) -> list[dict]:
     import torch
     pairs = [[query, c.get("text", "")] for c in chunks]
     inputs = _reranker_tok(
-        pairs, padding=True, truncation=True, max_length=MAX_LENGTH, return_tensors="pt",
+        pairs, padding=True, truncation=True, max_length=RERANK_MAX_LENGTH, return_tensors="pt",
     )
     with torch.no_grad():
         logits = model(**inputs).logits.view(-1)

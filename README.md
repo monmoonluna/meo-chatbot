@@ -270,7 +270,7 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 | Over-trigger (câu lành tính) | **1/36** (3%) | rerank-gate (11→8) + intent-gate (8→1), recall vẫn 9/9 |
 | Grounded (không bỏ cuộc) | **43/45** (96%) | 2 còn lại: 1 KB gap (Maine Coon), 1 soft-help |
 | Có citation `[n]` | **45/45** (100%) | sau khi sửa max_output_tokens + tắt thinking |
-| Latency (first response) | **~5s** | tắt gemini-2.5 thinking (trước ~75s) |
+| Latency (end-to-end /chat) | **~30s** | reranker ~28s (CPU) + LLM ~5s; trước ~90s. LLM riêng ~5s nhờ tắt thinking |
 | **Faithfulness** (LLM-judge 1-5) | **4.86** | *(run judge gần nhất; v7 generate-only chưa chấm lại)* |
 | **Helpfulness** (LLM-judge 1-5) | **4.69** | *(run judge gần nhất)* |
 
@@ -437,7 +437,13 @@ Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill +
 - **Behavior topic ~2-3%** trong corpus — Phase 2 sources tag `topic_hint=behavior` nhưng classifier flip nhiều sang topic khác. Tune classifier hoặc thêm nguồn behavior-only.
 - **`needs_vet` over-trigger 8/36 câu lành tính** — đã giảm từ 10/36 bằng rerank-relevance gate. Đã điều tra fix sâu hơn ở `pipeline/classifier.py` và **kết luận không khả thi**: keyword nặng trong body vừa gây over-trigger vừa là tín hiệu bắt cấp cứu thật, mọi rule severity chặt hơn đều làm rớt recall cấp cứu tệ hơn 1:1 (xem bảng ở Đánh giá chất lượng phần B). 8/36 là cái giá chấp nhận được cho recall 9/9.
 - **Breed coverage mỏng** — community Q&A gần như không có câu hỏi giống; KB breed chủ yếu dựa champetsfamily. Cần thêm nguồn breed-specific (sitemap phải verify thật, đừng đoán URL).
-- **Reranker tăng latency** — bge-reranker-v2-m3 chấm 20 cặp/query trên CPU (~5-8s). Set `MEO_RERANK=0` để tắt (fallback e5 ordering) nếu cần nhanh; hoặc chạy GPU.
+- **Reranker là 99% latency** — profile cho thấy embed ~0.07s, ChromaDB ~0.05s,
+  nhưng bge-reranker-v2-m3 (XLM-R-large, 568M) chấm cặp trên CPU là phần còn lại.
+  Đã tinh chỉnh: `MEO_RERANK_CANDIDATES=10` (giảm từ 20) + `MEO_RERANK_MAX_LENGTH=384`
+  (giảm từ 512) → ~80s xuống ~28s/query mà **vẫn giữ recall cấp cứu 9/9**
+  (`tune_needs_vet.py`). KHÔNG hạ max_length xuống 256 (làm rớt 1 ca cấp cứu → 8/9).
+  Cần nhanh hơn nữa: `MEO_RERANK=0` (tắt rerank, fallback e5 — nhưng mất rerank-gate
+  của needs_vet), reranker nhỏ hơn (phải re-validate ngưỡng gate), hoặc GPU.
 - **Stateless** — `session_id` chỉ trả về, không lưu lịch sử. Team web phải gửi `messages[]` mỗi request hoặc tự lưu Redis.
 - **Single-instance** — ChromaDB local, không scale horizontal. Để production cần switch lên Qdrant Cloud hoặc tương tự.
 - **SDK Gemini** — đã migrate sang `google-genai` (SDK mới); `google-generativeai` cũ (deprecated) đã gỡ khỏi dependencies.
