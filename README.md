@@ -462,8 +462,12 @@ Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill +
   hồi ghép `MEO_RETRIEVAL_HISTORY_TURNS` (mặc định 2) lượt user gần nhất nên chunk
   kéo về cũng đúng thực thể (trước đây retrieve chỉ dùng câu cuối → mù ngữ cảnh).
   Intent-gate vẫn đọc CÂU CUỐI (mức cấp tính của lượt hiện tại). Đặt 0 để tắt.
-- **Stateless** — server KHÔNG lưu lịch sử; `session_id` chỉ trả về. Team web phải
-  gửi `messages[]` mỗi request (hoặc tự lưu Redis) để bật multi-turn ở trên.
+  **FE nên gửi bao nhiêu lịch sử?** ~6 lượt gần nhất là đủ (khớp cửa sổ prompt;
+  retrieval chỉ dùng 2 lượt user cuối). Gửi nhiều hơn vô hại (BE tự cắt). Chọn
+  cửa sổ retrieval=2 qua thực nghiệm `scripts/tune_history_window.py`: bắt được
+  coreference 1-back & 2-back, mà không folds chủ đề cũ gây nhiễu như N≥3.
+- **Stateless** — server KHÔNG lưu lịch sử; `session_id` chỉ trả về. FE quản lý
+  hội thoại: lưu `messages[]` (kèm reply của bot) và gửi lại mỗi request.
 - **Single-instance** — ChromaDB local, không scale horizontal. Để production cần switch lên Qdrant Cloud hoặc tương tự.
 - **SDK Gemini** — đã migrate sang `google-genai` (SDK mới); `google-generativeai` cũ (deprecated) đã gỡ khỏi dependencies.
 - **OS silent-killer trên Windows** — pipeline đã có workaround (Task Scheduler) nhưng nguyên nhân chưa rõ (có thể Defender / scheduled tasks). Linux deploy sẽ không gặp.

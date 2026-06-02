@@ -251,6 +251,9 @@ def health():
 # (vd Q1 "mèo Maine Coon", Q2 "con mèo này gầy không" → retrieve mù giống).
 # Ghép N lượt USER gần nhất làm query truy hồi để giải coreference. 0 = tắt
 # (chỉ dùng câu cuối, hành vi cũ). KHÔNG ảnh hưởng intent-gate (vẫn đọc câu cuối).
+# Tune (scripts/tune_history_window.py): N=2 là điểm cân bằng — bắt coreference
+# 1-back & 2-back (good-hits 6/6); N=0 sót ref sâu; N≥3 KHÔNG thêm lợi mà tăng
+# nhiễu (folds chủ đề cũ khi user đổi topic trong hội thoại dài).
 RETRIEVAL_HISTORY_TURNS = int(os.getenv("MEO_RETRIEVAL_HISTORY_TURNS", "2"))
 
 
