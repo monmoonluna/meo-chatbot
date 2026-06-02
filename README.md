@@ -271,15 +271,18 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 | Grounded (không bỏ cuộc) | **43/45** (96%) | 2 còn lại: 1 KB gap (Maine Coon), 1 soft-help |
 | Có citation `[n]` | **45/45** (100%) | sau khi sửa max_output_tokens + tắt thinking |
 | Latency (end-to-end /chat) | **~30s** | reranker ~28s (CPU) + LLM ~5s; trước ~90s. LLM riêng ~5s nhờ tắt thinking |
-| **Faithfulness** (LLM-judge 1-5) | **4.86** | *(run judge gần nhất; v7 generate-only chưa chấm lại)* |
-| **Helpfulness** (LLM-judge 1-5) | **4.69** | *(run judge gần nhất)* |
+| **Faithfulness** (LLM-judge 1-5) | **4.86** | toàn bộ 45 câu (run `--judge` gần nhất) |
+| **Faithfulness** — subset health/cấp cứu | **5.00** (n=15) | chấm LẠI sau khi đổi prompt/thinking/token-cap → KHÔNG regress (v3 subset ~4.57) |
+| **Helpfulness** (LLM-judge 1-5) | **4.69** | toàn bộ 45 câu |
 
 > Số deterministic (topic / needs_vet / grounded / citation) từ run generate-only
 > v7 (`eval_external_results_v7.md`): thinking tắt, `max_output_tokens=2048`, eval
-> harness đã sửa (truyền câu hỏi vào `_compute_needs_vet`). Faithfulness/Helpfulness
-> giữ từ run `--judge` đầy đủ gần nhất (chưa chấm lại do hạn ngạch free-tier).
-> Chuỗi model `gemini-2.5-flash → 2.5-flash-lite → 2.0-flash → 2.0-flash-lite`,
-> xoay vòng nhiều API key (`GEMINI_API_KEYS`).
+> harness đã sửa (truyền câu hỏi vào `_compute_needs_vet`). Faithfulness 4.86 từ run
+> `--judge` đầy đủ gần nhất; sau 3 thay đổi generation của phiên này, đã chấm lại
+> riêng subset health/cấp cứu (`--topic health --judge`, `v8_health.md`) = 5.00/5,
+> xác nhận không hallucination trên các câu an toàn-trọng yếu. Full 45-câu re-judge
+> hoãn do hạn ngạch free-tier. Chuỗi model `gemini-2.5-flash → 2.5-flash-lite →
+> 2.0-flash → 2.0-flash-lite`, xoay vòng nhiều API key (`GEMINI_API_KEYS`).
 
 **Baseline (trước cải tiến)** phát hiện 3 vấn đề → đã fix:
 

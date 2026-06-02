@@ -179,11 +179,18 @@ def main() -> None:
                     help="Gemini chấm faithfulness+helpfulness mỗi reply (cần --with-llm, tốn thêm quota)")
     ap.add_argument("--delay", type=float, default=2.5)
     ap.add_argument("--limit", type=int, default=0, help="chỉ chạy N câu đầu (debug)")
+    ap.add_argument("--topic", default=None,
+                    help="chỉ chạy câu thuộc topic này (vd: health) — spot-check theo chủ đề")
+    ap.add_argument("--emer-only", action="store_true", help="chỉ chạy câu emer=true")
     ap.add_argument("--output", default=str(Path(__file__).parent / "eval_external_results.md"))
     args = ap.parse_args()
 
     data = json.loads(SET_PATH.read_text(encoding="utf-8"))
     questions = data["questions"]
+    if args.topic:
+        questions = [q for q in questions if q.get("topic") == args.topic]
+    if args.emer_only:
+        questions = [q for q in questions if q.get("emer")]
     if args.limit:
         questions = questions[:args.limit]
 
