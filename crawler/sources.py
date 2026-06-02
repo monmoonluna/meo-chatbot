@@ -124,6 +124,22 @@ SOURCES: list[Source] = [
         topic_hint="behavior",
         rate_limit_sec=2.5,
     ),
+
+    # ===== Breed-detail source (Phase 3) — lấp gap thể trạng giống =====
+    # Eval cho thấy KB thiếu nội dung body-condition theo giống (vd "Maine Coon
+    # 2 tuổi trông gầy có bình thường không" → không retrieve được chunk liên quan).
+    # petchoice.vn (Shopify): sitemap index THẬT đã verify → sitemap_blogs_1.xml có
+    # ~320 URL, ~240 (75%) về mèo, gồm bài chuyên giống (Maine Coon, Ragdoll,
+    # Munchkin, Angora) kèm cân nặng/đặc điểm. Có bài /blogs/news/meo-maine-coon.
+    # (Đã loại chomeow.com: sitemap.xml trả HTML, không phải sitemap thật.)
+    Source(
+        name="petchoice",
+        base_url="https://petchoice.vn",
+        sitemap_urls=["https://petchoice.vn/sitemap.xml"],  # index → discovers sitemap_blogs_1.xml
+        url_filter_regex=r"/blogs/.+(meo|kitten|cat)",
+        topic_hint="breed",
+        rate_limit_sec=2.0,
+    ),
 ]
 
 
