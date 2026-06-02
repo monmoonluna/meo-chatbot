@@ -127,10 +127,19 @@ CONTENT_TYPE_RULES: list[tuple[str, list[str]]] = [
 # Else: "info"
 
 HIGH_SEVERITY = [
-    "tử vong", "chết", "fip", "viêm phúc mạc", "felv", "fiv",
+    # "chết" trần khớp nhầm "lông chết"/"da chết"/"mô chết"/"bào chết" (~1.5k chunk
+    # grooming, vô hại) → bơm high sai. Bound bằng cụm cấp tính (tử vong giữ nguyên).
+    "tử vong", "mèo chết", "có thể chết", "gây chết", "dẫn đến chết",
+    "nguy cơ chết", "đe dọa tính mạng",
+    "fip", "viêm phúc mạc", "felv", "fiv",
     "suy thận", "tiểu đường", "ung thư", "khối u",
     "co giật", "động kinh", "khó thở", "ngừng thở",
     "cấp cứu", "khẩn cấp", "ngộ độc nặng",
+    # Cấp cứu sản khoa + sốc nhiệt + phản vệ — trước đây THIẾU nên đẻ khó / say nắng
+    # không được nhận là high (eval: dystocia & heatstroke không kích hoạt needs_vet).
+    "khó đẻ", "đẻ khó", "đẻ ngược", "khó sinh", "rặn lâu", "sót nhau",
+    "băng huyết", "thai chết", "say nắng", "sốc nhiệt", "kiệt sức do nhiệt",
+    "sốc phản vệ",
 ]
 MEDIUM_SEVERITY = [
     "tiêu chảy", "nôn", "ho", "sốt", "đau", "sưng", "viêm",
@@ -196,7 +205,11 @@ def classify_content_type(text: str) -> str:
 
 
 def classify_severity(text: str, topic: str) -> str:
-    if topic != "health":
+    # Trước đây chỉ tính cho health → cấp cứu nằm ở topic khác (đẻ khó = care,
+    # say nắng = care) không bao giờ được severity → needs_vet không kích hoạt.
+    # Mở sang "care" (nơi chứa sản khoa/sơ sinh/tai nạn). Vẫn KHÔNG tính cho
+    # breed/behavior/nutrition (hiếm cấp cứu thật, tránh nhiễu over-trigger).
+    if topic not in ("health", "care"):
         return "n/a"
     if any(kw in text for kw in HIGH_SEVERITY):
         return "high"

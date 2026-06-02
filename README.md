@@ -2,7 +2,7 @@
 
 RAG chatbot tiếng Việt tư vấn về mèo — **sức khỏe, dinh dưỡng, giống, chăm sóc, hành vi**.
 
-- 🐱 10 nguồn VN, **2,927 articles**, **75,264 chunks** đã embed
+- 🐱 11 nguồn VN, **4,975 articles**, **76,487 chunks** đã embed
 - 🔒 An toàn: severity=high → bot bắt buộc khuyên đi thú y
 - 📚 Citations: mỗi câu trả lời kèm 5 nguồn gốc click được
 - 💰 Stack 100% free tier: e5-small local + Gemini free + ChromaDB local
@@ -88,7 +88,7 @@ Nếu Python bị OS kill (Windows Defender quét định kỳ), dùng scheduled
 
 # Verify:
 .\.venv\Scripts\python.exe -c "import chromadb; print(chromadb.PersistentClient('data/chromadb').get_collection('meo_kb').count())"
-# Phải in: 75264
+# Phải in: 76487
 ```
 
 Sau khi download, **chạy chatbot ngay** không cần crawl/embed nữa.
@@ -154,7 +154,7 @@ Khi `needs_vet=true`, team web nên render **banner đỏ** kèm số hotline th
 ### `GET /health`
 Trả `{"status": "ok"}` để liveness check.
 
-## Nguồn dữ liệu (10 nguồn VN)
+## Nguồn dữ liệu (11 nguồn VN)
 
 ### Phase 1 — đa chủ đề
 | Source | Topic mạnh | Articles |
@@ -213,7 +213,7 @@ scripts/
 ```
 meo-chatbot/
 ├── crawler/             # Async sitemap crawler
-│   ├── sources.py       # 10 nguồn config (regex filter + topic hint)
+│   ├── sources.py       # 11 nguồn config (regex filter + topic hint)
 │   └── crawl.py
 ├── pipeline/            # Data processing
 │   ├── chunker.py       # Section-aware, ≤800 tokens/chunk
@@ -344,10 +344,18 @@ cấp cứu thật phrasing đời thường: `liếm phải thuốc tẩy`, `s�
 `rặn mãi mà không thấy nước tiểu`, `rơi từ tầng 3`, `ăn nhầm bả chuột`, `gặm phải lá
 bách hợp`, `mắt lồi`...). List hẹp ban đầu **lọt 11/20** → mở rộng `_ACUTE_INTENT`
 (~120 biến thể, gom theo nhóm hô hấp/thần kinh/ngộ độc/tiết niệu/...) → **intent
-recall 17/17** (ca có chunk-high liên quan), mà over-trigger trên set gốc **vẫn 1/36**.
-Còn **3 ca KB-coverage gap** (đẻ khó, mèo sơ sinh hạ thân nhiệt, ọe dịch vàng) —
-retrieve KHÔNG ra chunk severity=high nào → intent không cứu được, đây là **lỗ hổng
-nội dung KB** (mục tiêu crawl tương lai), không phải lỗi gate.
+recall 18/18** (ca có chunk-high liên quan), mà over-trigger trên set gốc **vẫn 1/36**.
+
+**`severity` decoupled khỏi topic (sửa lỗ hổng cấp cứu ngoài health).** Điều tra
+các "KB gap" cho thấy phần lớn KHÔNG thiếu nội dung mà do `classify_severity` chỉ
+chạy cho `topic==health` → cấp cứu nằm ở topic khác vô hình với needs_vet. Bằng
+chứng: đẻ khó có chunk rất liên quan (rr 0.9956) nhưng `topic=care` → `severity=n/a`.
+Fix: (1) mở severity sang `care`; (2) thêm từ khoá cấp cứu THIẾU vào `HIGH_SEVERITY`
+(`khó đẻ`, `rặn lâu`, `say nắng`, `sốc nhiệt`, `băng huyết`...); (3) bound `chết`
+(trước khớp nhầm `lông chết` ~1.5k chunk grooming). Kết quả: đẻ khó nay kích hoạt
+needs_vet, severity=high 9,750→10,101 (chỉ +351 net nhờ bound `chết`), guard giữ
+**9/9 recall + over-trigger 1/36**. Còn 2 ca KB-gap (say nắng — bài chuyên có nhưng
+rerank rớt sát ngưỡng; collapse) là vấn đề ranking/nội dung, không phải lỗi gate.
 
 **Regression-guard:** `scripts/tune_needs_vet.py` (retrieval-only, không tốn quota)
 `assert` cả hai: recall 9/9 trên set gốc VÀ intent-recall đầy đủ trên stress set —
