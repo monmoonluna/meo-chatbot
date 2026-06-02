@@ -260,7 +260,7 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 .\.venv\Scripts\python.exe scripts\eval_external.py --with-llm --judge
 ```
 
-**Kết quả đo** (45 câu, run `--judge` đầy đủ, 5 key xoay vòng nên không bị quota chặn):
+**Kết quả đo** (45 câu; số deterministic từ run v7, faithfulness từ run judge gần nhất — xem ghi chú dưới bảng):
 
 | Metric | Score | Ghi chú |
 |---|---|---|
@@ -268,13 +268,18 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 | Emergency → `needs_vet=true` | **9/9** (100%) | recall cấp cứu tuyệt đối |
 | Emergency có banner ⚠️ | **9/9** (100%) | banner server-side, không phụ thuộc LLM |
 | Over-trigger (câu lành tính) | **1/36** (3%) | rerank-gate (11→8) + intent-gate (8→1), recall vẫn 9/9 |
-| Grounded (không bỏ cuộc) | **42/45** (93%) | |
-| Có citation `[n]` | **37/45** (82%) | |
-| **Faithfulness** (LLM-judge 1-5) | **4.86** | mọi khẳng định có context chống lưng |
-| **Helpfulness** (LLM-judge 1-5) | **4.69** | trả lời đúng trọng tâm câu hỏi |
+| Grounded (không bỏ cuộc) | **43/45** (96%) | 2 còn lại: 1 KB gap (Maine Coon), 1 soft-help |
+| Có citation `[n]` | **45/45** (100%) | sau khi sửa max_output_tokens + tắt thinking |
+| Latency (first response) | **~5s** | tắt gemini-2.5 thinking (trước ~75s) |
+| **Faithfulness** (LLM-judge 1-5) | **4.86** | *(run judge gần nhất; v7 generate-only chưa chấm lại)* |
+| **Helpfulness** (LLM-judge 1-5) | **4.69** | *(run judge gần nhất)* |
 
-> Đo với chuỗi model `gemini-2.5-flash → 2.5-flash-lite → 2.0-flash → 2.0-flash-lite`
-> và xoay vòng nhiều API key (`GEMINI_API_KEYS`) để tránh cạn quota free-tier giữa batch.
+> Số deterministic (topic / needs_vet / grounded / citation) từ run generate-only
+> v7 (`eval_external_results_v7.md`): thinking tắt, `max_output_tokens=2048`, eval
+> harness đã sửa (truyền câu hỏi vào `_compute_needs_vet`). Faithfulness/Helpfulness
+> giữ từ run `--judge` đầy đủ gần nhất (chưa chấm lại do hạn ngạch free-tier).
+> Chuỗi model `gemini-2.5-flash → 2.5-flash-lite → 2.0-flash → 2.0-flash-lite`,
+> xoay vòng nhiều API key (`GEMINI_API_KEYS`).
 
 **Baseline (trước cải tiến)** phát hiện 3 vấn đề → đã fix:
 
