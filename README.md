@@ -174,7 +174,12 @@ Trả `{"status": "ok"}` để liveness check.
 | fagopet.vn | Trầm cảm chi tiết | 400 |
 | mochicat.vn | Cào, sợ hãi, đa dạng | 2,483 |
 
-**Tổng: 4,794 articles** (sau dedup URL: 2,927).
+### Phase 3 — breed detail (lấp gap body-condition)
+| Source | Note | Articles |
+|---|---|---:|
+| petchoice.vn | Breed chi tiết (sitemap đã verify) | 192 |
+
+**Tổng: 4,975 articles** (11 nguồn, sau dedup URL) → **76,487 chunks**.
 
 ## Tech stack
 

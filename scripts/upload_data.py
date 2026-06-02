@@ -77,14 +77,14 @@ Pre-built RAG data for [meo-chatbot](https://github.com/monmoonluna/meo-chatbot)
 
 ## Contents
 
-- `chromadb/` — ChromaDB persistent client with **75,264 chunks** (384-dim e5-small embeddings)
+- `chromadb/` — ChromaDB persistent client with **76,487 chunks** (384-dim e5-small embeddings)
 - `chunks/classified.jsonl` — raw chunks with metadata (topic, content_type, severity, level)
 - `cleaned/*.jsonl` — original articles per source (optional, only if `--include-cleaned`)
 
-## Sources (10 VN cat websites)
+## Sources (11 VN cat websites)
 
 pethealth.vn, paddy.vn, tropicpet.vn, mozzi.vn, champetsfamily.com,
-petspace.vn, petthings.vn, kingspet.vn, fagopet.vn, mochicat.vn
+petspace.vn, petthings.vn, kingspet.vn, fagopet.vn, mochicat.vn, petchoice.vn
 
 ## Usage
 
