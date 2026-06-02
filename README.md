@@ -93,6 +93,16 @@ Nếu Python bị OS kill (Windows Defender quét định kỳ), dùng scheduled
 
 Sau khi download, **chạy chatbot ngay** không cần crawl/embed nữa.
 
+> **Cập nhật khi data có phiên bản mới** (vd đã tải bản cũ trước đó): `snapshot_download`
+> chỉ ghi đè file đổi theo hash, KHÔNG xoá file thừa → an toàn nhất là XOÁ data cũ rồi
+> tải lại sạch. `git pull` để lấy code khớp data mới luôn.
+> ```powershell
+> git pull
+> Remove-Item -Recurse -Force data\chromadb, data\chunks
+> .\.venv\Scripts\python.exe scripts\download_data.py --repo-id Monmoonluna/meo-chatbot-data
+> ```
+> Kiểm tra `count` để biết đã lên bản mới chưa: **76487** = mới, **75264** = vẫn cũ.
+
 ## Chạy chatbot
 
 ```powershell
