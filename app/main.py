@@ -246,6 +246,25 @@ def health():
     return {"status": "ok"}
 
 
+# History-aware retrieval: câu hỏi tiếp theo thường tham chiếu thực thể ở lượt
+# trước ("con mèo này", "bé ấy"...). retrieve() chỉ dùng câu cuối → mất ngữ cảnh
+# (vd Q1 "mèo Maine Coon", Q2 "con mèo này gầy không" → retrieve mù giống).
+# Ghép N lượt USER gần nhất làm query truy hồi để giải coreference. 0 = tắt
+# (chỉ dùng câu cuối, hành vi cũ). KHÔNG ảnh hưởng intent-gate (vẫn đọc câu cuối).
+RETRIEVAL_HISTORY_TURNS = int(os.getenv("MEO_RETRIEVAL_HISTORY_TURNS", "2"))
+
+
+def _retrieval_query(messages: list) -> str:
+    """Query truy hồi nhận biết ngữ cảnh: ghép tối đa N lượt user trước + câu cuối."""
+    user_turns = [m.content for m in messages if m.role == "user"]
+    if not user_turns:
+        return ""
+    if RETRIEVAL_HISTORY_TURNS <= 0 or len(user_turns) == 1:
+        return user_turns[-1]
+    window = user_turns[-(RETRIEVAL_HISTORY_TURNS + 1):]  # N lượt trước + câu hiện tại
+    return " ".join(window)
+
+
 @app.post(
     "/chat",
     response_model=ChatResponse,
@@ -271,7 +290,10 @@ def chat(req: ChatRequest) -> ChatResponse:
             session_id=session_id,
         )
 
-    chunks = retrieve(last_user, k=req.top_k, topic_filter=topic)
+    # Truy hồi theo ngữ cảnh hội thoại (giải coreference ở câu follow-up); intent
+    # gate vẫn dùng last_user (mức cấp tính của CÂU HIỆN TẠI, không phải lịch sử).
+    retrieval_query = _retrieval_query(req.messages)
+    chunks = retrieve(retrieval_query, k=req.top_k, topic_filter=topic)
 
     if not chunks:
         return ChatResponse(

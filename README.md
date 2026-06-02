@@ -455,7 +455,15 @@ Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill +
   (`tune_needs_vet.py`). KHÔNG hạ max_length xuống 256 (làm rớt 1 ca cấp cứu → 8/9).
   Cần nhanh hơn nữa: `MEO_RERANK=0` (tắt rerank, fallback e5 — nhưng mất rerank-gate
   của needs_vet), reranker nhỏ hơn (phải re-validate ngưỡng gate), hoặc GPU.
-- **Stateless** — `session_id` chỉ trả về, không lưu lịch sử. Team web phải gửi `messages[]` mỗi request hoặc tự lưu Redis.
+- **Hội thoại đa lượt (multi-turn)** — gửi cả `messages[]` (kèm lượt assistant
+  trước) thì bot hiểu tham chiếu ngược: Q1 "mèo Maine Coon" → Q2 "con mèo này gầy
+  không" được giải đúng. Hai tầng: (1) prompt đưa 6 lượt gần nhất cho LLM (giải
+  coreference khi sinh câu trả lời); (2) **history-aware retrieval** — query truy
+  hồi ghép `MEO_RETRIEVAL_HISTORY_TURNS` (mặc định 2) lượt user gần nhất nên chunk
+  kéo về cũng đúng thực thể (trước đây retrieve chỉ dùng câu cuối → mù ngữ cảnh).
+  Intent-gate vẫn đọc CÂU CUỐI (mức cấp tính của lượt hiện tại). Đặt 0 để tắt.
+- **Stateless** — server KHÔNG lưu lịch sử; `session_id` chỉ trả về. Team web phải
+  gửi `messages[]` mỗi request (hoặc tự lưu Redis) để bật multi-turn ở trên.
 - **Single-instance** — ChromaDB local, không scale horizontal. Để production cần switch lên Qdrant Cloud hoặc tương tự.
 - **SDK Gemini** — đã migrate sang `google-genai` (SDK mới); `google-generativeai` cũ (deprecated) đã gỡ khỏi dependencies.
 - **OS silent-killer trên Windows** — pipeline đã có workaround (Task Scheduler) nhưng nguyên nhân chưa rõ (có thể Defender / scheduled tasks). Linux deploy sẽ không gặp.
