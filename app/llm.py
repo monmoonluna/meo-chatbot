@@ -122,15 +122,24 @@ def generate_reply(
     from google.genai import types
 
     prompt = build_user_prompt(messages, chunks, user_level=user_level)
-    config = types.GenerateContentConfig(
-        system_instruction=SYSTEM_PROMPT,
-        temperature=0.3,
-        # 1024 cắt ngang câu trả lời danh sách dài (tiếng Việt) trước khi kịp gắn
-        # [n] ở các gạch đầu dòng → rớt citation. 2048 đủ cho câu trả lời ~250 từ
-        # kèm trích nguồn mà không bị cụt.
-        max_output_tokens=2048,
-    )
     models = _get_models_to_try()
+
+    def _config_for(model_name: str) -> "types.GenerateContentConfig":
+        cfg = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            temperature=0.3,
+            # 1024 cắt ngang câu trả lời danh sách dài (tiếng Việt) trước khi kịp gắn
+            # [n] ở các gạch đầu dòng → rớt citation. 2048 đủ cho câu trả lời ~250 từ
+            # kèm trích nguồn mà không bị cụt.
+            max_output_tokens=2048,
+        )
+        # gemini-2.5* bật "thinking" mặc định: token suy nghĩ tính vào
+        # max_output_tokens nhưng KHÔNG nằm trong .text → câu trả lời bị cụt giữa
+        # chừng + tăng latency (~75s). RAG tra cứu không cần suy luận chuỗi → tắt.
+        # Chỉ áp dụng cho 2.5 (2.0* không hỗ trợ thinking_config → sẽ 400).
+        if model_name.startswith("gemini-2.5"):
+            cfg.thinking_config = types.ThinkingConfig(thinking_budget=0)
+        return cfg
 
     last_error = None
     for key in keys:
@@ -138,7 +147,7 @@ def generate_reply(
         for model_name in models:
             try:
                 response = client.models.generate_content(
-                    model=model_name, contents=prompt, config=config,
+                    model=model_name, contents=prompt, config=_config_for(model_name),
                 )
                 text = response.text
                 if not text:  # bộ lọc an toàn chặn / output rỗng
