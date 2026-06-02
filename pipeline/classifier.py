@@ -65,9 +65,15 @@ TOPIC_KEYWORDS: dict[str, list[str]] = {
     "health": [
         "bệnh", "triệu chứng", "tiêm phòng", "vaccine", "vacxin",
         "thú y", "thuốc", "điều trị", "chẩn đoán", "viêm", "nhiễm",
-        "ký sinh", "sán", "giun", "ve mèo", "rận", "bọ chét",
+        # "sán" trần khớp nhầm "sản" (sản phẩm, sản xuất, sinh sản) → 82% spurious.
+        "ký sinh", "sán dây", "sán lá", "nhiễm sán", "giun sán", "giun",
+        "ve mèo", "rận", "bọ chét",
         "fip", "fiv", "felv", "viêm phúc mạc", "tiểu đường", "suy thận",
-        "ung thư", "khối u", "tử vong", "ho", "nôn", "tiêu chảy", "sốt",
+        # "ho" trần (2 ký tự) khớp nhầm "cho" (cho mèo ăn), "khô" (hạt khô), "kho"
+        # → fire ở 92% chunk, bơm điểm health sai → flip behavior→health hàng loạt.
+        # Thay bằng cụm "ho" cụ thể (xem điều tra: behavior coverage +3.9k khi sửa).
+        "ung thư", "khối u", "tử vong", "bị ho", "ho khan", "ho kéo dài",
+        "ho liên tục", "cơn ho", "nôn", "tiêu chảy", "sốt",
         "co giật", "động kinh", "gãy xương", "tai nạn",
         "triệt sản", "thiến", "phẫu thuật", "xét nghiệm",
         "ngộ độc", "dị ứng", "kháng sinh", "kháng viêm",
