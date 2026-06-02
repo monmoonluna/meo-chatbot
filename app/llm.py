@@ -125,7 +125,10 @@ def generate_reply(
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
         temperature=0.3,
-        max_output_tokens=1024,
+        # 1024 cắt ngang câu trả lời danh sách dài (tiếng Việt) trước khi kịp gắn
+        # [n] ở các gạch đầu dòng → rớt citation. 2048 đủ cho câu trả lời ~250 từ
+        # kèm trích nguồn mà không bị cụt.
+        max_output_tokens=2048,
     )
     models = _get_models_to_try()
 
