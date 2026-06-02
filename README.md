@@ -154,6 +154,37 @@ Khi `needs_vet=true`, team web nên render **banner đỏ** kèm số hotline th
 ### `GET /health`
 Trả `{"status": "ok"}` để liveness check.
 
+### Hội thoại nhiều lượt (multi-turn) — FE gửi context thế nào
+
+Server **stateless** (không lưu lịch sử). Để bot hiểu câu tham chiếu ngược ("con
+mèo này", "nó", "bé ấy"), **FE tự giữ hội thoại và gửi lại cả mảng `messages[]`
+mỗi request** — các lượt cũ (cả `user` lẫn `assistant`) + câu hỏi mới ở cuối.
+
+**Lượt 1** — FE gửi câu đầu, rồi LƯU `reply` nhận về:
+```json
+{ "messages": [ {"role": "user", "content": "Tôi nuôi một con mèo Maine Coon."} ] }
+```
+
+**Lượt 2** — FE gửi LỊCH SỬ + câu mới:
+```json
+{ "messages": [
+    {"role": "user",      "content": "Tôi nuôi một con mèo Maine Coon."},
+    {"role": "assistant", "content": "<reply của lượt 1>"},
+    {"role": "user",      "content": "Con mèo này nên ăn gì?"}
+] }
+```
+→ bot giải "con mèo này" = Maine Coon (cả khi trả lời lẫn khi truy hồi KB).
+
+**Quy tắc cho FE:**
+1. Giữ một mảng `messages` trong state (localStorage / DB / component state).
+2. Mỗi lần user hỏi: thêm `{"role":"user","content": <câu mới>}` rồi POST cả mảng.
+3. Nhận `reply` → thêm `{"role":"assistant","content": <reply>}` vào mảng.
+4. `session_id` server trả về chỉ để FE log/analytics — **server KHÔNG dùng nó để nhớ**.
+
+**Gửi bao nhiêu lịch sử:** ~6 lượt gần nhất là đủ (server dùng tối đa 6 lượt cho
+prompt, 2 lượt user cuối cho retrieval; thừa thì tự cắt). Chỉ gửi câu mới mà bỏ
+lịch sử → bot mất ngữ cảnh, không giải được tham chiếu.
+
 ## Nguồn dữ liệu (11 nguồn VN)
 
 ### Phase 1 — đa chủ đề
@@ -297,99 +328,30 @@ sang tiếng Việt tự nhiên, cân bằng 5 topic + 9 ca khẩn cấp thật.
 | e5 cosine bị nén → topic precision thấp, give-up | **Cross-encoder rerank** top-20→top-5 (`app/retriever.py`) |
 | `needs_vet` over-trigger ~1/3 câu lành tính | Rerank-gate + intent-gate (xem dưới) → còn 1/36 |
 
-**`needs_vet` — rerank-relevance gate** (an toàn > precision): chunk `severity=high`
-chỉ bật cảnh báo khi nó đủ **liên quan** (`rerank_score >= 0.5`); nếu reranker
-tắt/hỏng thì fallback về "any high" để không bao giờ tắt cảnh báo ngầm.
+**`needs_vet` — 3 cổng an toàn** (recall cấp cứu LUÔN giữ **9/9**). Chunk
+`severity=high` chỉ bật banner ⚠️ khi cả ba thoả:
+1. **rerank-gate** — chunk đủ liên quan (`rerank_score ≥ 0.5`); reranker hỏng → fallback "any high" (không bao giờ tắt cảnh báo ngầm).
+2. **intent-gate** — câu hỏi có ngôn ngữ cấp tính (`_ACUTE_INTENT`, ~120 biến thể). Vì `severity` là thuộc tính của *chunk*, không phải mức khẩn của *câu hỏi* (vd "đặt lồng vận chuyển ở đâu" vẫn kéo về chunk-high liên quan).
+3. **severity tách khỏi topic** — tính cho cả `care` (không chỉ `health`) + bổ sung từ khoá sản khoa/sốc nhiệt (`khó đẻ`, `rặn lâu`, `say nắng`...) → cấp cứu ngoài health (vd đẻ khó) cũng kích hoạt.
 
-| Rule | Emergency recall | Over-trigger |
-|---|---|---|
-| `any high in top-5` (cũ) | **9/9** | 11/36 |
-| `high + rerank_score>=0.5` | **9/9** | 8/36 |
-| `high + rr>=0.5 + intent` (đang dùng) | **9/9** | **1/36** |
-| `high in top-2` | 4/6 ❌ | — |
-| `high in top-1` | 3/6 ❌ | — |
+Hai cổng đầu đưa over-trigger **11/36 → 1/36** mà không rớt recall. (Đã thử siết
+theo `severity`/rank: mọi rule giảm over-trigger đều rớt recall cấp cứu tệ hơn 1:1
+— keyword-nặng-trong-body vừa gây nhiễu lành tính VỪA là tín hiệu cấp cứu thật,
+không tách được.) Banner **prepend server-side** (LLM hay bỏ sót). Tắt intent-gate:
+`MEO_NEEDS_VET_REQUIRE_INTENT=0`.
 
-Các rule "rank-based" chặt hơn **bỏ sót ca cấp cứu thật** (vd máu trong phân, viêm
-bàng quang — chunk severity=high không phải lúc nào cũng rank 1). Rerank gate giữ
-9/9 recall (sàn `rerank_score` của chunk-high ở câu cấp cứu = 0.937) mà loại các
-flag rõ ràng sai (Maine Coon gầy `rr=0.11`, mèo gạt đồ vật `rr=0.25`).
+**Guard:** `scripts/tune_needs_vet.py` (retrieval-only, không tốn quota) `assert`
+recall 9/9 trên set gốc VÀ intent-recall đầy đủ trên 20 ca khẩu ngữ
+(`emergency_stress_set.json`) — chạy lại sau mỗi lần sửa từ khoá.
 
-**Còn 8/36 over-trigger — đã thử fix ở classifier, KẾT LUẬN: không nên.** Phân tích
-10.590 chunk `high` cho thấy phần lớn được gán high vì keyword nặng (vd `khó thở`,
-`khối u`, `tử vong`) nằm trong **body** như nhắc thoáng qua, không phải tiêu đề. Thử
-2 rule chặt hơn (validate offline trên đúng chunk v3 đã retrieve):
-
-| Rule severity | Emergency recall | Over-trigger |
-|---|---|---|
-| `any HIGH_SEVERITY kw` (đang dùng) | **9/9** | 8/36 |
-| kw phải nằm trong **title** | 4/9 ❌ | 2/36 |
-| hybrid (kw cấp tính ở body OK, tên bệnh mãn tính chỉ tính ở title) | 7/9 ❌ | 7/36 |
-
-→ **Trên trục `severity` của chunk, mọi rule giảm over-trigger đều giảm recall cấp
-cứu, tỉ lệ tệ hơn 1:1** (hybrid mất 2 ca thật — viêm bàng quang tái phát, nôn liên
-tục — để đổi lấy 1 ca lành tính). Lý do: keyword-nặng-trong-body vừa gây over-trigger
-lành tính VỪA là tín hiệu bắt cấp cứu thật — **không tách được bằng severity**.
-
-**`needs_vet` — intent-gate (đòn bẩy thứ 2, trục câu hỏi).** Phân tích rerank cho thấy
-7/8 câu lành tính over-trigger lại có chunk-high **rất liên quan** (`rr` 0.98–0.999,
-vượt cả sàn cấp cứu 0.937) → ngưỡng `rr` đã cạn (chỉ hạ được 11→8). Mấu chốt:
-`severity` là thuộc tính của **chunk**, không phải mức cấp tính của **câu hỏi**. "Đặt
-lồng vận chuyển ở đâu" kéo về chunk-high liên quan nhưng bản thân câu hỏi không cấp
-tính. Nên thêm cổng cấp 2: chỉ bật banner khi **câu hỏi** chứa ngôn ngữ cấp tính
-(`khó thở`, `nôn liên tục`, `máu`, `không đi tiểu`, `ngộ độc`... — list red-flag
-cố tình rộng, xem stress-test bên dưới). Dry-run `eval_external_set.json`:
-**over-trigger 8→1, recall giữ 9/9**
-(ca còn lại "mèo bỏ ăn đợi bao lâu" — `bỏ ăn >24h` là red-flag thật, chấp nhận được).
-
-Bật/tắt bằng `MEO_NEEDS_VET_REQUIRE_INTENT` (mặc định 1; đặt 0 → về cổng chỉ-rr).
-
-**Rủi ro keyword → stress-test để vá.** Intent dựa trên keyword nên câu cấp cứu diễn
-đạt khẩu ngữ/gián tiếp có thể lọt. Đã soạn `scripts/emergency_stress_set.json` (20 ca
-cấp cứu thật phrasing đời thường: `liếm phải thuốc tẩy`, `sùi bọt mép`, `thở khó`,
-`rặn mãi mà không thấy nước tiểu`, `rơi từ tầng 3`, `ăn nhầm bả chuột`, `gặm phải lá
-bách hợp`, `mắt lồi`...). List hẹp ban đầu **lọt 11/20** → mở rộng `_ACUTE_INTENT`
-(~120 biến thể, gom theo nhóm hô hấp/thần kinh/ngộ độc/tiết niệu/...) → **intent
-recall 18/18** (ca có chunk-high liên quan), mà over-trigger trên set gốc **vẫn 1/36**.
-
-**`severity` decoupled khỏi topic (sửa lỗ hổng cấp cứu ngoài health).** Điều tra
-các "KB gap" cho thấy phần lớn KHÔNG thiếu nội dung mà do `classify_severity` chỉ
-chạy cho `topic==health` → cấp cứu nằm ở topic khác vô hình với needs_vet. Bằng
-chứng: đẻ khó có chunk rất liên quan (rr 0.9956) nhưng `topic=care` → `severity=n/a`.
-Fix: (1) mở severity sang `care`; (2) thêm từ khoá cấp cứu THIẾU vào `HIGH_SEVERITY`
-(`khó đẻ`, `rặn lâu`, `say nắng`, `sốc nhiệt`, `băng huyết`...); (3) bound `chết`
-(trước khớp nhầm `lông chết` ~1.5k chunk grooming). Kết quả: đẻ khó nay kích hoạt
-needs_vet, severity=high 9,750→10,101 (chỉ +351 net nhờ bound `chết`), guard giữ
-**9/9 recall + over-trigger 1/36**. Còn 2 ca KB-gap (say nắng — bài chuyên có nhưng
-rerank rớt sát ngưỡng; collapse) là vấn đề ranking/nội dung, không phải lỗi gate.
-
-**Regression-guard:** `scripts/tune_needs_vet.py` (retrieval-only, không tốn quota)
-`assert` cả hai: recall 9/9 trên set gốc VÀ intent-recall đầy đủ trên stress set —
-chạy lại sau mỗi lần sửa `_ACUTE_INTENT`.
-
-Khi `needs_vet=true`, server **tự prepend banner ⚠️** (không phụ thuộc LLM tự chèn —
-eval cho thấy LLM bỏ sót 9/9). Logic: `app/main.py:_compute_needs_vet`.
-
-**Topic routing 34/45 — điều tra kỹ: phần lớn là *artifact của thước đo*, không phải
-lỗi truy hồi.** `topic_detected` = `topic` xuất hiện nhiều nhất trong top-5 (count
-majority). Ba phát hiện (validate offline trên đúng top-5 đã retrieve):
-
-1. **Đổi cách bình chọn là no-op.** count = rerank-weighted = e5-weighted → **đúng
-   y hệt 34/45**, sai cùng các câu. Không ship đổi voting.
-2. **Recall thực = 41/45 (91%).** Trong 11 ca "sai", **7 ca** topic đúng VẪN nằm
-   trong top-5 nhưng bị majority-vote đè; nội dung truy hồi đúng (vd "mèo con tiêm
-   phòng khi nào" → top hit *Lịch Tiêm Phòng Cho Mèo Con* rr=0.999, chỉ "sai" vì
-   tiêm phòng gắn nhãn `health` còn test-set kỳ vọng `care`). Đây là **chồng lấn
-   taxonomy**, không phải answer sai (faithfulness 4.86 xác nhận). Chỉ **~1 ca** là
-   thiếu nội dung thật (Maine Coon gầy — body-condition theo giống, rr cao nhất 0.42).
-   → Crawl thêm KB **không đáng** cho 1 ca; "76%" đánh giá thấp chất lượng thực.
-3. **Một bug nhãn ĐÃ fix:** keyword nutrition `"cá"` (2 ký tự) khớp nhầm `"các"`
-   (từ tiếng Việt cực phổ biến) như substring → fire ở **69.363/75.264 chunk (92%)**,
-   trong đó **82% là nhiễu `các`** chứ không phải cá (thức ăn). Bơm điểm nutrition sai
-   → flip nhầm (vd nội dung "giới thiệu thú cưng mới" bị gắn `nutrition`). Fix: thay
-   `"cá"` trần bằng cụm cụ thể (`cá hồi`, `cá ngừ`, `thịt cá`, `ăn cá`). Kết quả
-   re-classify: `nutrition` 14%→8% (bỏ nhãn thừa), `health` **+1.460 chunk** (severity
-   `high` 10.590→10.765 → cảnh báo cấp cứu MẠNH hơn, không yếu đi), chỉ 7 chunk rời
-   health. Áp dụng bằng `pipeline.ingest` update metadata-only (không re-embed).
+**Topic routing 34/45 (76%) — phần lớn là *artifact thước đo*, không phải lỗi truy
+hồi.** `topic_detected` = topic xuất hiện nhiều nhất trong top-5. Recall thật ~91%:
+7/11 ca "sai" có topic đúng VẪN trong top-5 nhưng bị majority-vote đè, và là **chồng
+lấn taxonomy** (vd "tiêm phòng" gắn `health` còn test kỳ vọng `care`) — answer vẫn
+đúng (faithfulness xác nhận); chỉ ~1 ca thiếu nội dung thật → crawl thêm không đáng.
+Đã vá vài **bug substring classifier** (`cá`→`các`, `ho`→`cho/khô`, `sán`→`sản`,
+`chết`→`lông chết`) — keyword 2–3 ký tự khớp nhầm hàng chục nghìn chunk, bơm sai
+topic/severity; bound bằng cụm cụ thể (behavior coverage +3.9k, health hết phình giả).
 
 ## Troubleshooting
 
@@ -450,33 +412,22 @@ Khi crawl hoặc ingest đứng > 5 phút mà file count không tăng → kill +
 
 ## Known limitations / Future work
 
-- **Behavior topic ~2-3%** trong corpus — Phase 2 sources tag `topic_hint=behavior` nhưng classifier flip nhiều sang topic khác. Tune classifier hoặc thêm nguồn behavior-only.
-- **`needs_vet` over-trigger 8/36 câu lành tính** — đã giảm từ 10/36 bằng rerank-relevance gate. Đã điều tra fix sâu hơn ở `pipeline/classifier.py` và **kết luận không khả thi**: keyword nặng trong body vừa gây over-trigger vừa là tín hiệu bắt cấp cứu thật, mọi rule severity chặt hơn đều làm rớt recall cấp cứu tệ hơn 1:1 (xem bảng ở Đánh giá chất lượng phần B). 8/36 là cái giá chấp nhận được cho recall 9/9.
-- **Breed coverage mỏng** — community Q&A gần như không có câu hỏi giống; KB breed chủ yếu dựa champetsfamily. Cần thêm nguồn breed-specific (sitemap phải verify thật, đừng đoán URL).
-- **Reranker là 99% latency** — profile cho thấy embed ~0.07s, ChromaDB ~0.05s,
-  nhưng bge-reranker-v2-m3 (XLM-R-large, 568M) chấm cặp trên CPU là phần còn lại.
-  Đã tinh chỉnh: `MEO_RERANK_CANDIDATES=10` (giảm từ 20) + `MEO_RERANK_MAX_LENGTH=384`
-  (giảm từ 512) → ~80s xuống ~28s/query mà **vẫn giữ recall cấp cứu 9/9**
-  (`tune_needs_vet.py`). KHÔNG hạ max_length xuống 256 (làm rớt 1 ca cấp cứu → 8/9).
-  Cần nhanh hơn nữa: `MEO_RERANK=0` (tắt rerank, fallback e5 — nhưng mất rerank-gate
-  của needs_vet), reranker nhỏ hơn (phải re-validate ngưỡng gate), hoặc GPU.
-- **Hội thoại đa lượt (multi-turn)** — gửi cả `messages[]` (kèm lượt assistant
-  trước) thì bot hiểu tham chiếu ngược: Q1 "mèo Maine Coon" → Q2 "con mèo này gầy
-  không" được giải đúng. Hai tầng: (1) prompt đưa 6 lượt gần nhất cho LLM (giải
-  coreference khi sinh câu trả lời); (2) **history-aware retrieval** — query truy
-  hồi ghép `MEO_RETRIEVAL_HISTORY_TURNS` (mặc định 2) lượt user gần nhất nên chunk
-  kéo về cũng đúng thực thể (trước đây retrieve chỉ dùng câu cuối → mù ngữ cảnh).
-  Intent-gate vẫn đọc CÂU CUỐI (mức cấp tính của lượt hiện tại). Đặt 0 để tắt.
-  **FE nên gửi bao nhiêu lịch sử?** ~6 lượt gần nhất là đủ (khớp cửa sổ prompt;
-  retrieval chỉ dùng 2 lượt user cuối). Gửi nhiều hơn vô hại (BE tự cắt). Chọn
-  cửa sổ retrieval=2 qua thực nghiệm `scripts/tune_history_window.py`: bắt được
-  coreference 1-back & 2-back, mà không folds chủ đề cũ gây nhiễu như N≥3.
-- **Stateless** — server KHÔNG lưu lịch sử; `session_id` chỉ trả về. FE quản lý
-  hội thoại: lưu `messages[]` (kèm reply của bot) và gửi lại mỗi request.
-- **Single-instance** — ChromaDB local, không scale horizontal. Để production cần switch lên Qdrant Cloud hoặc tương tự.
-- **SDK Gemini** — đã migrate sang `google-genai` (SDK mới); `google-generativeai` cũ (deprecated) đã gỡ khỏi dependencies.
-- **OS silent-killer trên Windows** — pipeline đã có workaround (Task Scheduler) nhưng nguyên nhân chưa rõ (có thể Defender / scheduled tasks). Linux deploy sẽ không gặp.
-- **`sentence_transformers` không tin cậy trên 1 số máy Windows** — retriever đã bypass dùng `transformers` trực tiếp. Ingest vẫn dùng `sentence_transformers`; nếu fail trên máy bạn, có thể sửa `pipeline/ingest.py` theo cùng pattern hoặc download data sẵn từ HF (không cần re-ingest).
+- **Latency ~30s/query** — reranker (bge-reranker-v2-m3, CPU) là ~99% (embed 0.07s,
+  ChromaDB 0.05s). Đã tinh chỉnh 90s→30s qua `MEO_RERANK_CANDIDATES=10` +
+  `MEO_RERANK_MAX_LENGTH=384` (KHÔNG hạ 256 — rớt 1 ca cấp cứu). Xuống <5s cần GPU /
+  ONNX / reranker nhỏ hơn. Tắt nhanh: `MEO_RERANK=0` (mất rerank-gate của needs_vet).
+- **Multi-turn do FE quản lý** — server stateless, FE gửi `messages[]` mỗi request
+  (xem "Hội thoại nhiều lượt" ở phần API). Chưa có session store server-side (Redis)
+  để FE chỉ gửi câu mới.
+- **2 ca cấp cứu vẫn KB/ranking gap** — say nắng (bài có nhưng rerank rớt sát ngưỡng)
+  + collapse. Body-condition theo giống còn mỏng (đã thêm nguồn petchoice).
+- **Single-instance** — ChromaDB local, không scale ngang → production cần Qdrant Cloud.
+- **Windows OS silent-kill** khi crawl (Defender?) — workaround auto-restart + Task
+  Scheduler; Linux deploy không gặp.
+- **`sentence_transformers` crash trên vài máy Windows** — retriever bypass bằng
+  `transformers` trực tiếp (output bit-exact). Ingest vẫn dùng nó; nếu fail → tải
+  data sẵn từ HF.
+- **SDK** — đã migrate `google-genai`; gỡ `google-generativeai` (deprecated).
 
 ## License & Data ethics
 
