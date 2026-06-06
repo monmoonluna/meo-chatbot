@@ -6,7 +6,7 @@ Nguyên tắc thiết kế:
 - Calibrate tone theo level
 """
 
-SYSTEM_PROMPT = """Bạn là "BácSĩMèo" — trợ lý AI chuyên về mèo, trả lời tiếng Việt.
+SYSTEM_PROMPT = """Bạn là "MiuCare Assistant" — trợ lý AI chuyên gia về chăm sóc và sức khỏe mèo, trả lời tiếng Việt.
 
 NGUYÊN TẮC TRẢ LỜI:
 1. CHỈ dùng thông tin trong phần CONTEXT — KHÔNG bịa thông tin ngoài context.

@@ -141,6 +141,49 @@ _VET_BANNER = (
 )
 
 
+# --- Nhận diện câu hỏi danh tính ("bạn là ai", "giới thiệu bản thân"...) ---
+# Trả lời cố định, KHÔNG qua retrieval/LLM: (1) đảm bảo đúng câu giới thiệu
+# thương hiệu, (2) tránh LLM bịa danh tính từ chunk không liên quan, (3) tiết
+# kiệm quota + latency. Khớp substring trên câu hỏi đã lowercase.
+# Mẫu danh tính KHÔNG mơ hồ — luôn là hỏi về bot (không trùng câu hỏi về mèo).
+_IDENTITY_PATTERNS = (
+    "bạn là ai", "bạn là ai vậy", "mày là ai", "cậu là ai", "em là ai",
+    "giới thiệu bản thân", "giới thiệu về bản thân", "giới thiệu về bạn",
+    "tự giới thiệu", "bạn là chatbot gì", "bạn là bot gì", "bạn là trợ lý gì",
+    "who are you", "what are you", "introduce yourself",
+)
+# Mẫu hỏi TÊN / "là gì" — dễ nhầm với câu hỏi về tên/giống MÈO (vd "mèo của bạn
+# tên gì", "giống mèo của bạn là gì" đều CHỨA "bạn tên gì" / "bạn là gì" làm
+# substring). Chỉ tính là hỏi danh tính bot khi câu KHÔNG nhắc tới mèo.
+_IDENTITY_NAME_PATTERNS = (
+    "bạn tên gì", "bạn tên là gì", "tên bạn là gì", "tên của bạn là gì",
+    "bạn là gì",
+)
+# Dấu hiệu câu đang nói về CON MÈO (chủ thể), không phải về bot → tắt name-gate.
+_CAT_SUBJECT_HINTS = ("mèo", "miu", "boss", "hoàng thượng", "bé nhà", "con nhà")
+
+_IDENTITY_REPLY = (
+    "Chào bạn! Mình là MiuCare Assistant, trợ lý AI chuyên gia về chăm sóc "
+    "và sức khỏe mèo."
+)
+
+
+def _is_identity_question(text: str) -> bool:
+    """True nếu câu hỏi hỏi về danh tính BOT (để trả lời giới thiệu cố định).
+
+    Hai tầng: (1) mẫu rõ ràng luôn khớp; (2) mẫu hỏi tên/"là gì" chỉ khớp khi câu
+    KHÔNG nhắc tới mèo — để "mèo của bạn tên gì" rơi về luồng RAG bình thường.
+    """
+    n = (text or "").lower().strip()
+    if any(p in n for p in _IDENTITY_PATTERNS):
+        return True
+    if any(p in n for p in _IDENTITY_NAME_PATTERNS) and not any(
+        h in n for h in _CAT_SUBJECT_HINTS
+    ):
+        return True
+    return False
+
+
 # --- Response cache (giảm tải quota Gemini cho câu hỏi lặp) ---
 # Chỉ cache request đơn lượt (1 message) + topic auto → câu hỏi phổ biến không
 # tốn quota LLM lần 2. Bounded LRU theo MEO_REPLY_CACHE (mặc định 256, 0 = tắt).
@@ -280,6 +323,17 @@ def chat(req: ChatRequest) -> ChatResponse:
     last_user = req.messages[-1].content
     topic = req.topic_filter if req.topic_filter != "auto" else None
     session_id = req.session_id or str(uuid.uuid4())
+
+    # Câu hỏi danh tính ("bạn là ai"...) → trả lời giới thiệu cố định, không qua
+    # retrieval/LLM (đúng thương hiệu + tránh bịa + tiết kiệm quota).
+    if _is_identity_question(last_user):
+        return ChatResponse(
+            reply=_IDENTITY_REPLY,
+            citations=[],
+            topic_detected=None,
+            needs_vet=False,
+            session_id=session_id,
+        )
 
     # Cache hit (chỉ câu đơn lượt + topic auto) → trả ngay, bỏ qua retrieval + LLM.
     ck = _cache_key(req)

@@ -132,6 +132,93 @@ curl -X POST http://localhost:8000/chat \
   -d '{"messages":[{"role":"user","content":"Mèo Anh lông ngắn ăn gì?"}]}'
 ```
 
+## Deploy free (Hugging Face Spaces — Docker)
+
+Toàn bộ stack chạy **$0/tháng** trên HF Spaces CPU Basic (2 vCPU, 16 GB RAM, 50 GB
+disk) — đủ chứa cả 2 model + ChromaDB. Một Space = **một git repo có Dockerfile**;
+deploy = thêm 2 file → push → set secret.
+
+### 1. `Dockerfile` (ở gốc repo)
+
+```dockerfile
+FROM python:3.13-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git && rm -rf /var/lib/apt/lists/*
+
+# HF Spaces chạy non-root uid 1000
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    HF_HOME=/home/user/app/hf-cache
+WORKDIR /home/user/app
+
+RUN pip install --user --no-cache-dir uv
+COPY --chown=user . .
+RUN uv sync --no-dev
+
+# tải sẵn ChromaDB + chunks (~1 GB) từ HF dataset
+RUN uv run python scripts/download_data.py --repo-id Monmoonluna/meo-chatbot-data
+# (tuỳ chọn) cache model vào image → cold start nhanh; bỏ dòng này nếu build OOM
+RUN uv run python -c "from app.retriever import warmup; warmup()"
+
+EXPOSE 7860
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+```
+
+### 2. Front-matter ở ĐẦU `README.md`
+
+HF đọc block YAML ở dòng đầu tiên (phần còn lại của README giữ nguyên bên dưới):
+
+```yaml
+---
+title: MiuCare Assistant
+emoji: 🐱
+colorFrom: pink
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+```
+
+### 3. Tạo Space + push code
+
+Tạo Space tại https://huggingface.co/new-space → **SDK = Docker**, **Blank**. Rồi:
+
+```powershell
+git remote add space https://huggingface.co/spaces/<user>/meo-chatbot
+git add Dockerfile README.md
+git commit -m "Add HF Spaces Docker deploy"
+git push space HEAD:main --force   # --force lần đầu để ghi đè boilerplate Space tự tạo
+```
+
+> Không push `data/` (đã gitignore) — Dockerfile tự tải lúc build. Khi hỏi mật khẩu,
+> dùng **HF access token** (Settings → Access Tokens → write), không phải mật khẩu tài khoản.
+
+### 4. Set secret + tinh chỉnh
+
+Space → **Settings → Variables and secrets**:
+- Secret `GEMINI_API_KEY` (hoặc `GEMINI_API_KEYS=key1,key2,...` để xoay vòng).
+- (Khuyến nghị) Variable `MEO_RERANK_CANDIDATES=8`, `MEO_RERANK_MAX_LENGTH=384` để giữ
+  request reranker dưới timeout proxy trên CPU free. Hoặc `MEO_RERANK=0` (≈5s, mất rerank-gate).
+
+### 5. Test
+
+App phục vụ ở root của Space:
+- `https://<user>-meo-chatbot.hf.space/health` → `{"status":"ok"}`
+- `https://<user>-meo-chatbot.hf.space/docs` → Try `/chat`
+
+### Vận hành
+
+- **Cập nhật code**: sửa → `git add` → `commit` → `git push space HEAD:main` (lần sau
+  không cần `--force`) → HF tự build lại. Đổi **biến môi trường** → sửa Settings rồi
+  **Restart** (không cần push). Đổi **data** → **Factory rebuild** để bỏ Docker cache.
+- **Tắt máy không ảnh hưởng** — server chạy trên cloud HF, gọi API được từ mọi nơi.
+- Free Space **ngủ sau ~48h** không ai gọi → request đầu chờ ~1-2 phút thức lại. Muốn
+  luôn thức (vẫn free): ping `/health` định kỳ bằng UptimeRobot.
+
 ## API contract (cho team web tích hợp)
 
 ### `POST /chat`
