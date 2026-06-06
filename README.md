@@ -1,3 +1,12 @@
+---
+title: MeoBot
+emoji: 🐱
+colorFrom: pink
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
 # meo-chatbot
 
 RAG chatbot tiếng Việt tư vấn về mèo — **sức khỏe, dinh dưỡng, giống, chăm sóc, hành vi**.
